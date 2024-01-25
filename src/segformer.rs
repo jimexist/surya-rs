@@ -19,6 +19,7 @@ pub struct Config {
     pub hidden_act: candle_nn::Activation,
     pub layer_norm_eps: f64,
     pub decoder_hidden_size: usize,
+    pub decoder_fused_hidden_size: usize,
 }
 
 impl Default for Config {
@@ -26,16 +27,17 @@ impl Default for Config {
         Self {
             num_channels: 3,
             num_encoder_blocks: 4,
-            depths: vec![2, 2, 2, 2],
+            depths: vec![3, 4, 9, 3],
             sr_ratios: vec![8, 4, 2, 1],
-            hidden_sizes: vec![32, 64, 160, 256],
+            hidden_sizes: vec![64, 128, 320, 512],
             patch_sizes: vec![7, 3, 3, 3],
             strides: vec![4, 2, 2, 2],
             num_attention_heads: vec![1, 2, 5, 8],
             mlp_ratios: vec![4, 4, 4, 4],
             hidden_act: candle_nn::Activation::Gelu,
             layer_norm_eps: 1e-6,
-            decoder_hidden_size: 256,
+            decoder_hidden_size: 192,
+            decoder_fused_hidden_size: 768,
         }
     }
 }
@@ -534,18 +536,18 @@ impl SegformerDecodeHead {
         }
         let linear_fuse = conv2d_no_bias(
             config.decoder_hidden_size * config.num_encoder_blocks,
-            config.decoder_hidden_size,
+            config.decoder_fused_hidden_size,
             1,
             Conv2dConfig::default(),
             vb.pp("linear_fuse"),
         )?;
         let batch_norm = candle_nn::batch_norm(
-            config.decoder_hidden_size,
+            config.decoder_fused_hidden_size,
             config.layer_norm_eps,
             vb.pp("batch_norm"),
         )?;
         let classifier = conv2d_no_bias(
-            config.decoder_hidden_size,
+            config.decoder_fused_hidden_size,
             num_labels,
             1,
             Conv2dConfig::default(),
