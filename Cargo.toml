@@ -1,8 +1,25 @@
 [package]
-name = "surya-rs"
+name = "surya"
 version = "0.1.0"
 edition = "2021"
+description = "Surya is a multilingual document OCR toolkit, original implementation in Python and PyTorch"
+license = "Apache-2.0"
+repository = "https://github.com/jimexist/surya-rs"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = { version = "1.0.79", optional = true }
+candle-core = { version = "0.3.2" }
+clap = { version = "4.4.18", features = ["derive"], optional = true }
+env_logger = { version = "0.11.0" }
+hf-hub = { version = "0.3.2", optional = true }
+log = { version = "0.4.20" }
+
+[features]
+metal = ["candle-core/metal"]
+cli = ["clap", "anyhow", "hf-hub"]
+
+[[bin]]
+name = "surya"
+path = "src/bin/main.rs"
+required-features = ["cli"]
