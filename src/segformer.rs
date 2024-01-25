@@ -173,10 +173,10 @@ impl Module for SegformerEfficientSelfAttention {
             .transpose_for_scores(self.query.forward(&hidden_states)?)?
             .contiguous()?;
         let hidden_states = if let (Some(sr), Some(layer_norm)) = (&self.sr, &self.layer_norm) {
-            let hidden_states = sr.forward(&x)?;
+            let hidden_states = sr.forward(x)?;
             let hidden_states = hidden_states.flatten_from(2)?.permute((0, 2, 1))?;
-            let hidden_states = layer_norm.forward(&hidden_states)?;
-            hidden_states
+            
+            layer_norm.forward(&hidden_states)?
         } else {
             hidden_states
         };
@@ -296,7 +296,7 @@ impl SegformerMixFFN {
     ) -> Result<Self> {
         let dense1 = linear(in_features, hidden_features, vb.pp("dense1"))?;
         let dw_conv = SegformerDWConv::new(hidden_features, vb.pp("dwconv"))?;
-        let act = config.hidden_act.into();
+        let act = config.hidden_act;
         let dense2 = linear(hidden_features, out_features, vb.pp("dense2"))?;
         Ok(Self {
             dense1,
@@ -324,9 +324,9 @@ impl Module for SegformerMixFFN {
             .dense2
             .forward(&hidden_states.flatten_from(2)?.permute((0, 2, 1))?)?;
         let channels = hidden_states.dim(2)?;
-        Ok(hidden_states
+        hidden_states
             .permute((0, 2, 1))?
-            .reshape((batch, channels, height, width))?)
+            .reshape((batch, channels, height, width))
     }
 }
 
