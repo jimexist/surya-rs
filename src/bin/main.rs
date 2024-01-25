@@ -55,7 +55,7 @@ impl Args {
         info!("downloading {} from hugging face", &self.model_repo);
         let model_file = repo.get(&self.weights_name)?;
         let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[model_file], candle_core::DType::F32, &device)?
+            VarBuilder::from_mmaped_safetensors(&[model_file], candle_core::DType::F32, device)?
         };
         Ok(vb)
     }
