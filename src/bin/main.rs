@@ -1,7 +1,7 @@
 use clap::{Parser, ValueEnum};
 use hf_hub::api::sync::Api;
 use log::info;
-use surya::segformer;
+use surya::segformer::SemanticSegmentationModel;
 
 #[derive(Debug, ValueEnum, Clone, Copy)]
 enum Device {

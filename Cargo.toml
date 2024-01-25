@@ -10,13 +10,14 @@ repository = "https://github.com/jimexist/surya-rs"
 [dependencies]
 anyhow = { version = "1.0.79", optional = true }
 candle-core = { version = "0.3.2" }
+candle-nn = { version = "0.3.2" }
 clap = { version = "4.4.18", features = ["derive"], optional = true }
 env_logger = { version = "0.11.0" }
 hf-hub = { version = "0.3.2", optional = true }
 log = { version = "0.4.20" }
 
 [features]
-metal = ["candle-core/metal"]
+metal = ["candle-core/metal", "candle-nn/metal"]
 cli = ["clap", "anyhow", "hf-hub"]
 
 [[bin]]
