@@ -6,7 +6,6 @@ description = "Surya is a multilingual document OCR toolkit, original implementa
 license = "Apache-2.0"
 repository = "https://github.com/jimexist/surya-rs"
 
-
 [dependencies]
 anyhow = { version = "1.0.79", optional = true }
 candle-core = { version = "0.3.2" }

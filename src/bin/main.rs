@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Parser, ValueEnum};
 use hf_hub::api::sync::Api;
 use log::info;
@@ -14,9 +16,19 @@ enum Device {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(long, default_value = "vikp/line_detector")]
+    #[arg(long, help = "path to image")]
+    image: PathBuf,
+    #[arg(
+        long,
+        default_value = "vikp/line_detector",
+        help = "model's hugging face repo"
+    )]
     model_repo: String,
-    #[arg(long, default_value = "model.safetensors")]
+    #[arg(
+        long,
+        default_value = "model.safetensors",
+        help = "model's weights name"
+    )]
     weights_name: String,
     #[arg(long, value_enum, default_value_t = Device::Cpu)]
     device_type: Device,
