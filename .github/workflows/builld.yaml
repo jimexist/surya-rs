@@ -18,5 +18,14 @@ jobs:
       - name: Run build
         run: cargo build --features=cli --bins
 
+      - name: Run fmt check
+        run: cargo fmt --all --check
+
+      - name: Run clippy
+        run: cargo clippy --features=cli --bins
+
+      - name: Run unit tests
+        run: cargo test --features=cli --bins
+
       - name: Test run surya
         run: cargo run --features=cli --bin surya -- --help

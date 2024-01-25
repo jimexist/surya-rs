@@ -175,7 +175,7 @@ impl Module for SegformerEfficientSelfAttention {
         let hidden_states = if let (Some(sr), Some(layer_norm)) = (&self.sr, &self.layer_norm) {
             let hidden_states = sr.forward(x)?;
             let hidden_states = hidden_states.flatten_from(2)?.permute((0, 2, 1))?;
-            
+
             layer_norm.forward(&hidden_states)?
         } else {
             hidden_states
