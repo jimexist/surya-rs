@@ -7,7 +7,10 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -15,16 +18,24 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Run build
-        run: cargo build --features=cli --bins
+      - name: Run check
+        if: matrix.os != 'macos-latest'
+        run: cargo check --features=cli --bins
+
+      - name: Run check with Metal
+        if: matrix.os == 'macos-latest'
+        run: cargo check --features=cli,metal --bins
 
       - name: Run fmt check
+        if: matrix.os == 'ubuntu-latest'
         run: cargo fmt --all --check
 
       - name: Run clippy
+        if: matrix.os == 'ubuntu-latest'
         run: cargo clippy --features=cli --bins
 
       - name: Run unit tests
+        if: matrix.os == 'ubuntu-latest'
         run: cargo test --features=cli --bins
 
       - name: Test run surya
