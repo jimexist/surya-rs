@@ -1,0 +1,22 @@
+name: Build
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run build
+        run: cargo build --features=cli --bins
+
+      - name: Test run surya
+        run: cargo run --features=cli --bin surya -- --help
