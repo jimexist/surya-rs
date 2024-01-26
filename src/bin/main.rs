@@ -2,8 +2,8 @@ use candle_core::{Device, IndexOp, Module};
 use candle_nn::VarBuilder;
 use clap::{Parser, ValueEnum};
 use hf_hub::api::sync::Api;
-use image::io::Reader;
-use image::{GrayImage, ImageBuffer, Luma};
+
+
 use log::info;
 use std::path::PathBuf;
 use surya::preprocess::{heatmap_to_gray_image, load_image_tensor, read_resized_image};
@@ -63,8 +63,6 @@ impl Args {
         Ok(vb)
     }
 }
-
-const IMAGE_SIZE: usize = 224;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
