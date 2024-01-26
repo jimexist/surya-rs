@@ -1,8 +1,21 @@
 # surya-rs
 
 [![Build](https://github.com/Jimexist/surya-rs/actions/workflows/builld.yaml/badge.svg)](https://github.com/Jimexist/surya-rs/actions/workflows/builld.yaml)
+![Crates.io Version](https://img.shields.io/crates/v/surya)
 
 Rust implementation of [surya][surya], a multilingual document OCR toolkit. The implementation is based on a modified version of Segformer.
+
+## Roadmap
+
+This project is still in development, feel free to star and check back.
+
+- [x] model structure, segformer (for inference only)
+- [x] weights loading
+- [ ] image input pre-processing
+- [ ] heatmap and bboxes
+- [ ] text recognition
+- [ ] benchmark
+- [ ] quantifications
 
 ## How to build and install
 
@@ -16,9 +29,9 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 Build and install the binary:
 
 ```bash
-# run this unless you have a mac with M1/2/3 chip
+# run this if you have a mac with M1/2/3 chip
 cargo install --path . --features=cli,metal --bin surya
-# run this on a mac with M1/2/3 chip
+# run this on other architectures
 cargo install --path . --features=cli --bin surya
 ```
 
