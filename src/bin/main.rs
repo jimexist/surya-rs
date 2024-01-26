@@ -1,9 +1,11 @@
-use candle_core::Device;
+use candle_core::{Device, Module};
 use candle_nn::VarBuilder;
 use clap::{Parser, ValueEnum};
 use hf_hub::api::sync::Api;
+use image::io::Reader;
 use log::info;
 use std::path::PathBuf;
+use surya::preprocess::{load_image_tensor, read_resized_image};
 use surya::segformer::SemanticSegmentationModel;
 
 #[derive(Debug, ValueEnum, Clone, Copy)]
@@ -61,17 +63,27 @@ impl Args {
     }
 }
 
+const IMAGE_SIZE: usize = 224;
+
 fn main() -> anyhow::Result<()> {
     env_logger::init();
     let args = Args::parse();
     let device = args.device_type.try_into()?;
     let vb = args.get_var_builder(&device)?;
     let num_labels = 2;
-    let config = Default::default();
-    let _model = SemanticSegmentationModel::new(&config, num_labels, vb)?;
+
     info!(
         "loaded model from {} with weights file {}",
         args.model_repo, args.weights_name
     );
+    let image = read_resized_image(&args.image);
+    let image = load_image_tensor(image?, &device)?;
+    // batch
+    let input = image.unsqueeze(0)?;
+
+    let config = Default::default();
+    let model = SemanticSegmentationModel::new(&config, num_labels, vb)?;
+    let segmentation = model.forward(&input)?;
+    info!("segmentation result {:?}", segmentation.shape());
     Ok(())
 }
