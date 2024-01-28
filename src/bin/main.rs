@@ -1,11 +1,11 @@
-use candle_core::{Device, Module};
+use candle_core::{Device, IndexOp, Module};
 use candle_nn::VarBuilder;
 use clap::{Parser, ValueEnum};
 use hf_hub::api::sync::Api;
-use image::io::Reader;
+
 use log::info;
 use std::path::PathBuf;
-use surya::preprocess::{load_image_tensor, read_resized_image};
+use surya::preprocess::{heatmap_to_gray_image, load_image_tensor, read_resized_image};
 use surya::segformer::SemanticSegmentationModel;
 
 #[derive(Debug, ValueEnum, Clone, Copy)]
@@ -63,27 +63,33 @@ impl Args {
     }
 }
 
-const IMAGE_SIZE: usize = 224;
-
 fn main() -> anyhow::Result<()> {
     env_logger::init();
     let args = Args::parse();
     let device = args.device_type.try_into()?;
     let vb = args.get_var_builder(&device)?;
     let num_labels = 2;
-
     info!(
         "loaded model from {} with weights file {}",
         args.model_repo, args.weights_name
     );
-    let image = read_resized_image(&args.image);
-    let image = load_image_tensor(image?, &device)?;
-    // batch
+    let (image, origin_size) = read_resized_image(&args.image)?;
+    info!("image original size {origin_size:?}");
+    let image = load_image_tensor(image, &device)?;
     let input = image.unsqueeze(0)?;
-
     let config = Default::default();
     let model = SemanticSegmentationModel::new(&config, num_labels, vb)?;
     let segmentation = model.forward(&input)?;
-    info!("segmentation result {:?}", segmentation.shape());
+    let segmentation = segmentation.squeeze(0)?;
+    {
+        let heatmap = segmentation.i(0)?;
+        let imgbuf = heatmap_to_gray_image(heatmap, origin_size)?;
+        imgbuf.save("heatmap.png")?;
+    }
+    {
+        let affinity_map = segmentation.i(1)?;
+        let imgbuf = heatmap_to_gray_image(affinity_map, origin_size)?;
+        imgbuf.save("affinity_map.png")?;
+    }
     Ok(())
 }
