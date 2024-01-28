@@ -40,8 +40,8 @@ jobs:
 
       - name: Run check on macOS
         run: |
-          echo "setting DYLD_FALLBACK_LIBRARY_PATH to $(xcode-select --print-path)/usr/lib/"
-          export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/usr/lib/"
+          echo "setting DYLD_FALLBACK_LIBRARY_PATH to $(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/"
+          export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/"
           cargo check --features=cli,metal --bins
 
   build:
