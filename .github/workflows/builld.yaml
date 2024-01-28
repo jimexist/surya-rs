@@ -5,37 +5,66 @@ on:
     branches:
       - main
 
-jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+env:
+  OPENCV_VERSION: "4.9.0"
 
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    env:
+      OPENCV_LINK_LIBS: "opencv_world490"
+      OPENCV_LINK_PATHS: "C:/tools/opencv/build/x64/vc16/lib,C:/tools/opencv/build/x64/vc15/lib"
+      OPENCV_INCLUDE_PATHS: "C:/tools/opencv/build/include"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup OpenCV and LLVM
+        run: choco install opencv llvm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Run check
-        if: matrix.os != 'macos-latest'
+      - name: Run check on Windows
         run: cargo check --features=cli --bins
 
-      - name: Run check with Metal
-        if: matrix.os == 'macos-latest'
-        run: cargo check --features=cli,metal --bins
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup OpenCV and LLVM
+        run: brew install opencv llvm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run check on macOS
+        run: |
+          echo "setting DYLD_FALLBACK_LIBRARY_PATH to $(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/"
+          export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/"
+          cargo check --features=cli,metal --bins
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup OpenCV for Ubuntu
+        run: sudo apt install -y libopencv-dev clang libclang-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run check on Ubuntu
+        run: cargo check --features=cli --bins
 
       - name: Run fmt check
-        if: matrix.os == 'ubuntu-latest'
         run: cargo fmt --all --check
 
       - name: Run clippy
-        if: matrix.os == 'ubuntu-latest'
         run: cargo clippy --features=cli --bins
 
       - name: Run unit tests
-        if: matrix.os == 'ubuntu-latest'
         run: cargo test --features=cli --bins
 
       - name: Test run surya
