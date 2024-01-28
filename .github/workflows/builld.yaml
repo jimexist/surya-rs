@@ -20,24 +20,37 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt install -y libopencv-dev clang libclang-dev
 
-      - name: Setup OpenCV for Windows
+      - name: Setup OpenCV and LLVM for Windows
         if: matrix.os == 'windows-latest'
-        run: choco install opencv
+        run: choco install opencv llvm
 
-      - name: Setup OpenCV for macOS
+      - name: Setup OpenCV and LLVM for macOS
         if: matrix.os == 'macos-latest'
-        run: brew install opencv
+        run: brew install opencv llvm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Run check
-        if: matrix.os != 'macos-latest'
+      - name: Run check on Ubuntu
+        if: matrix.os == 'ubuntu-latest'
         run: cargo check --features=cli --bins
 
-      - name: Run check with Metal
+      - name: Run check on Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          export OPENCV_VERSION="4.9.0"
+          export PATH="/C/tools/opencv/build/x64/vc16/bin:/C/tools/opencv/build/x64/vc15/bin:$PATH"
+          export OPENCV_LINK_PATHS="C:/tools/opencv/build/x64/vc16/lib,C:/tools/opencv/build/x64/vc15/lib"
+          export OPENCV_LINK_LIBS="opencv_world${OPENCV_VERSION//./}"
+          export OPENCV_INCLUDE_PATHS="C:/tools/opencv/build/include"
+          cargo check --features=cli --bins
+
+      - name: Run check with Metal on macOS
         if: matrix.os == 'macos-latest'
-        run: cargo check --features=cli,metal --bins
+        run: |
+          # see https://github.com/twistedfall/opencv-rust/blob/master/TROUBLESHOOTING.md
+          export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/usr/lib/"
+          cargo check --features=cli,metal --bins
 
       - name: Run fmt check
         if: matrix.os == 'ubuntu-latest'
