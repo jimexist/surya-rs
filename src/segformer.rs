@@ -5,7 +5,7 @@ use candle_nn::{
 };
 
 // https://github.com/huggingface/transformers/blob/main/src/transformers/models/segformer/configuration_segformer.py
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
 pub struct Config {
     pub num_channels: usize,
     pub num_encoder_blocks: usize,
@@ -18,12 +18,12 @@ pub struct Config {
     pub mlp_ratios: Vec<usize>,
     pub hidden_act: candle_nn::Activation,
     pub layer_norm_eps: f64,
+    pub decoder_layer_hidden_size: usize,
     pub decoder_hidden_size: usize,
-    pub decoder_fused_hidden_size: usize,
 }
 
-impl Default for Config {
-    fn default() -> Self {
+impl Config {
+    pub fn new() -> Self {
         Self {
             num_channels: 3,
             num_encoder_blocks: 4,
@@ -36,9 +36,15 @@ impl Default for Config {
             mlp_ratios: vec![4, 4, 4, 4],
             hidden_act: candle_nn::Activation::Gelu,
             layer_norm_eps: 1e-6,
-            decoder_hidden_size: 192,
-            decoder_fused_hidden_size: 768,
+            decoder_layer_hidden_size: 192,
+            decoder_hidden_size: 768,
         }
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -63,7 +69,7 @@ impl SegformerOverlapPatchEmbeddings {
             patch_size,
             Conv2dConfig {
                 stride,
-                padding: patch_size.div_ceil(2),
+                padding: patch_size / 2,
                 ..Default::default()
             },
             vb.pp("proj"),
@@ -113,21 +119,20 @@ impl SegformerEfficientSelfAttention {
             candle_core::bail!(
                 "The hidden size {} is not a multiple of the number of attention heads {}",
                 hidden_size,
-                num_attention_heads
-            )
+                num_attention_heads,
+            );
         }
-        let attention_head_size = hidden_size.div_ceil(num_attention_heads);
+        let attention_head_size = hidden_size / num_attention_heads;
         let all_head_size = num_attention_heads * attention_head_size;
         let query = linear(hidden_size, all_head_size, vb.pp("query"))?;
         let key = linear(hidden_size, all_head_size, vb.pp("key"))?;
         let value = linear(hidden_size, all_head_size, vb.pp("value"))?;
         let (sr, layer_norm) = if sequence_reduction_ratio > 1 {
-            let kernel_size = sequence_reduction_ratio;
             (
                 Some(conv2d(
                     hidden_size,
                     hidden_size,
-                    kernel_size,
+                    sequence_reduction_ratio,
                     Conv2dConfig {
                         stride: sequence_reduction_ratio,
                         ..Default::default()
@@ -170,16 +175,18 @@ impl SegformerEfficientSelfAttention {
 
 impl Module for SegformerEfficientSelfAttention {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
+        // [B, C, H, W] -> [B, H * W, C]
         let hidden_states = x.flatten_from(2)?.permute((0, 2, 1))?;
         let query = self
             .transpose_for_scores(self.query.forward(&hidden_states)?)?
             .contiguous()?;
         let hidden_states = if let (Some(sr), Some(layer_norm)) = (&self.sr, &self.layer_norm) {
             let hidden_states = sr.forward(x)?;
+            // [B, C, H, W] -> [B, H * W, C]
             let hidden_states = hidden_states.flatten_from(2)?.permute((0, 2, 1))?;
-
             layer_norm.forward(&hidden_states)?
         } else {
+            // already [B, H * W, C]
             hidden_states
         };
         // standard self-attention
@@ -193,10 +200,8 @@ impl Module for SegformerEfficientSelfAttention {
             (query.matmul(&key.t()?)? / f64::sqrt(self.attention_head_size as f64))?;
         let attention_scores = candle_nn::ops::softmax_last_dim(&attention_scores)?;
         let result = attention_scores.matmul(&value)?;
-        result
-            .permute((0, 2, 1, 3))?
-            .contiguous()?
-            .flatten_from(D::Minus2)
+        let result = result.permute((0, 2, 1, 3))?.contiguous()?;
+        result.flatten_from(D::Minus2)
     }
 }
 
@@ -376,21 +381,19 @@ impl SegformerLayer {
 
 impl Module for SegformerLayer {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let (batch, channels, height, width) = x.shape().dims4()?;
+        let shape = x.shape().dims4()?;
+        // [B, C, H, W] -> [B, H * W, C]
         let hidden_states = x.flatten_from(2)?.permute((0, 2, 1))?;
-        let hidden_states = self.layer_norm_1.forward(&hidden_states)?;
-        let attention_output = self.attention.forward(
-            &hidden_states
-                .permute((0, 2, 1))?
-                .reshape(&[batch, channels, height, width])?,
-        )?;
-        let hidden_states = (hidden_states + attention_output)?;
-        let hidden_states = self.layer_norm_2.forward(&hidden_states)?;
-        let hidden_states = hidden_states
-            .permute((0, 2, 1))?
-            .reshape((batch, channels, height, width))?;
-        let mlp_output = self.mlp.forward(&hidden_states)?;
-        hidden_states + mlp_output
+        let layer_norm_output = self.layer_norm_1.forward(&hidden_states)?;
+        let layer_norm_output = layer_norm_output.permute((0, 2, 1))?.reshape(shape)?;
+        // attention takes in [B, C, H, W] in order to properly do conv2d (and output [B, H * W, C])
+        let attention_output = self.attention.forward(&layer_norm_output)?;
+        let hidden_states = (attention_output + hidden_states)?;
+        let layer_norm_output = self.layer_norm_2.forward(&hidden_states)?;
+        let mlp_output = self
+            .mlp
+            .forward(&layer_norm_output.permute((0, 2, 1))?.reshape(shape)?)?;
+        hidden_states.permute((0, 2, 1))?.reshape(shape)? + mlp_output
     }
 }
 
@@ -467,12 +470,10 @@ impl ModuleWithHiddenStates for SegformerEncoder {
             for layer in &self.blocks[i] {
                 hidden_states = layer.forward(&hidden_states)?;
             }
-            let (batch, channels, height, width) = hidden_states.shape().dims4()?;
+            let shape = hidden_states.shape().dims4()?;
             hidden_states =
                 self.layer_norms[i].forward(&hidden_states.flatten_from(2)?.permute((0, 2, 1))?)?;
-            hidden_states = hidden_states
-                .permute((0, 2, 1))?
-                .reshape((batch, channels, height, width))?;
+            hidden_states = hidden_states.permute((0, 2, 1))?.reshape(shape)?;
             all_hidden_states.push(hidden_states.clone());
         }
         Ok(all_hidden_states)
@@ -504,7 +505,7 @@ struct SegformerMLP {
 
 impl SegformerMLP {
     fn new(config: &Config, input_dim: usize, vb: VarBuilder) -> Result<Self> {
-        let proj = linear(input_dim, config.decoder_hidden_size, vb.pp("proj"))?;
+        let proj = linear(input_dim, config.decoder_layer_hidden_size, vb.pp("proj"))?;
         Ok(Self { proj })
     }
 }
@@ -512,6 +513,104 @@ impl SegformerMLP {
 impl Module for SegformerMLP {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
         self.proj.forward(x)
+    }
+}
+
+trait ModuleWithHiddenStates {
+    fn forward(&self, xs: &Tensor) -> Result<Vec<Tensor>>;
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_config_json_load() {
+        let raw_json = r#"{
+            "_name_or_path": "line_detector_192_aug/checkpoint-72000",
+            "architectures": [
+              "SegformerForRegressionMask"
+            ],
+            "attention_probs_dropout_prob": 0.0,
+            "classifier_dropout_prob": 0.1,
+            "decoder_hidden_size": 768,
+            "decoder_layer_hidden_size": 192,
+            "decoder_upsample_rate": 2,
+            "depths": [
+              3,
+              4,
+              9,
+              3
+            ],
+            "downsampling_rates": [
+              1,
+              4,
+              8,
+              16
+            ],
+            "drop_path_rate": 0.1,
+            "hidden_act": "gelu",
+            "hidden_dropout_prob": 0.0,
+            "hidden_sizes": [
+              64,
+              128,
+              320,
+              512
+            ],
+            "id2label": {
+              "0": "blank",
+              "1": "text"
+            },
+            "image_size": 224,
+            "initializer_range": 0.02,
+            "label2id": {
+              "blank": 0,
+              "text": 1
+            },
+            "layer_norm_eps": 1e-06,
+            "mlp_ratios": [
+              4,
+              4,
+              4,
+              4
+            ],
+            "model_type": "segformer",
+            "num_attention_heads": [
+              1,
+              2,
+              5,
+              8
+            ],
+            "num_channels": 3,
+            "num_encoder_blocks": 4,
+            "patch_sizes": [
+              7,
+              3,
+              3,
+              3
+            ],
+            "reshape_last_stage": true,
+            "semantic_loss_ignore_index": -1,
+            "sr_ratios": [
+              8,
+              4,
+              2,
+              1
+            ],
+            "strides": [
+              4,
+              2,
+              2,
+              2
+            ],
+            "torch_dtype": "float32",
+            "transformers_version": "4.36.0"
+          }"#;
+        let config: Config = serde_json::from_str(raw_json).unwrap();
+        assert_eq!(vec![4, 2, 2, 2], config.strides);
+        assert_eq!(1e-6, config.layer_norm_eps);
+        assert_eq!(Config::default(), config);
     }
 }
 
@@ -535,19 +634,19 @@ impl SegformerDecodeHead {
             )?);
         }
         let linear_fuse = conv2d_no_bias(
-            config.decoder_hidden_size * config.num_encoder_blocks,
-            config.decoder_fused_hidden_size,
+            config.decoder_layer_hidden_size * config.num_encoder_blocks,
+            config.decoder_hidden_size,
             1,
             Conv2dConfig::default(),
             vb.pp("linear_fuse"),
         )?;
         let batch_norm = candle_nn::batch_norm(
-            config.decoder_fused_hidden_size,
+            config.decoder_hidden_size,
             config.layer_norm_eps,
             vb.pp("batch_norm"),
         )?;
         let classifier = conv2d_no_bias(
-            config.decoder_fused_hidden_size,
+            config.decoder_hidden_size,
             num_labels,
             1,
             Conv2dConfig::default(),
@@ -590,10 +689,6 @@ impl SegformerDecodeHead {
         let hidden_states = hidden_states.relu()?;
         self.classifier.forward(&hidden_states)
     }
-}
-
-trait ModuleWithHiddenStates {
-    fn forward(&self, xs: &Tensor) -> Result<Vec<Tensor>>;
 }
 
 #[derive(Debug, Clone)]

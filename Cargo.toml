@@ -19,6 +19,8 @@ image = { version = "0.24.8", default-features = false, features = [
   "png",
 ] }
 log = { version = "0.4.20" }
+serde = { version = "1.0.196" }
+serde_json = { version = "1.0.112" }
 
 [features]
 metal = ["candle-core/metal", "candle-nn/metal"]
