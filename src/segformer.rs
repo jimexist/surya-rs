@@ -645,7 +645,7 @@ impl SegformerDecodeHead {
             config.layer_norm_eps,
             vb.pp("batch_norm"),
         )?;
-        let classifier = conv2d_no_bias(
+        let classifier = conv2d(
             config.decoder_hidden_size,
             num_labels,
             1,
@@ -683,6 +683,7 @@ impl SegformerDecodeHead {
             let hidden_state = hidden_state.upsample_nearest2d(upsample_height, upsample_width)?;
             hidden_states.push(hidden_state);
         }
+        hidden_states.reverse();
         let hidden_states = Tensor::cat(&hidden_states, 1)?;
         let hidden_states = self.linear_fuse.forward(&hidden_states)?;
         let hidden_states = self.batch_norm.forward_t(&hidden_states, false)?;
@@ -711,6 +712,8 @@ impl SemanticSegmentationModel {
 impl Module for SemanticSegmentationModel {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
         let hidden_states = self.segformer.forward(x)?;
-        self.decode_head.forward(&hidden_states)
+        let hidden_states = self.decode_head.forward(&hidden_states)?;
+        let result = candle_nn::ops::sigmoid(&hidden_states)?;
+        Ok(result)
     }
 }
