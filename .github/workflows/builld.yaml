@@ -29,8 +29,6 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
-    env:
-      DYLD_FALLBACK_LIBRARY_PATH: "$(xcode-select --print-path)/usr/lib/"
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +39,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Run check on macOS
-        run: cargo check --features=cli,metal --bins
+        run: |
+          DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/usr/lib/" \
+            cargo check --features=cli,metal --bins
 
   build:
     runs-on: ubuntu-latest
