@@ -15,6 +15,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup OpenCV for Ubuntu
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt install -y libopencv-dev clang libclang-dev
+
+      - name: Setup OpenCV for Windows
+        if: matrix.os == 'windows-latest'
+        run: choco install opencv
+
+      - name: Setup OpenCV for macOS
+        if: matrix.os == 'macos-latest'
+        run: brew install opencv
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
