@@ -5,63 +5,65 @@ on:
     branches:
       - main
 
-jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    env:
-      OPENCV_VERSION: "4.9.0"
+env:
+  OPENCV_VERSION: "4.9.0"
 
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    env:
+      OPENCV_LINK_LIBS: "opencv_world490"
+      OPENCV_LINK_PATHS: "C:/tools/opencv/build/x64/vc16/lib,C:/tools/opencv/build/x64/vc15/lib"
+      OPENCV_INCLUDE_PATHS: "C:/tools/opencv/build/include"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup OpenCV for Ubuntu
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt install -y libopencv-dev clang libclang-dev
-
-      - name: Setup OpenCV and LLVM for Windows
-        if: matrix.os == 'windows-latest'
+      - name: Setup OpenCV and LLVM
         run: choco install opencv llvm
-
-      - name: Setup OpenCV and LLVM for macOS
-        if: matrix.os == 'macos-latest'
-        run: brew install opencv llvm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Run check on Windows
-        if: matrix.os == 'windows-latest'
-        run: |
-          set OPENCV_LINK_PATHS="C:/tools/opencv/build/x64/vc16/lib,C:/tools/opencv/build/x64/vc15/lib"
-          set OPENCV_LINK_LIBS="opencv_world${OPENCV_VERSION//./}"
-          set OPENCV_INCLUDE_PATHS="C:/tools/opencv/build/include"
-          cargo check --features=cli --bins
-
-      - name: Run check on Ubuntu
-        if: matrix.os == 'ubuntu-latest'
         run: cargo check --features=cli --bins
 
-      - name: Run check with Metal on macOS
-        if: matrix.os == 'macos-latest'
-        run: |
-          # see https://github.com/twistedfall/opencv-rust/blob/master/TROUBLESHOOTING.md
-          set DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/usr/lib/"
-          cargo check --features=cli,metal --bins
+  build-macos:
+    runs-on: macos-latest
+    env:
+      DYLD_FALLBACK_LIBRARY_PATH: "$(xcode-select --print-path)/usr/lib/"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup OpenCV and LLVM
+        run: brew install opencv llvm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run check on macOS
+        run: cargo check --features=cli,metal --bins
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup OpenCV for Ubuntu
+        run: sudo apt install -y libopencv-dev clang libclang-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run check on Ubuntu
+        run: cargo check --features=cli --bins
 
       - name: Run fmt check
-        if: matrix.os == 'ubuntu-latest'
         run: cargo fmt --all --check
 
       - name: Run clippy
-        if: matrix.os == 'ubuntu-latest'
         run: cargo clippy --features=cli --bins
 
       - name: Run unit tests
-        if: matrix.os == 'ubuntu-latest'
         run: cargo test --features=cli --bins
 
       - name: Test run surya
