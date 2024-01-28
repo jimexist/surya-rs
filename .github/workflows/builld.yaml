@@ -36,15 +36,15 @@ jobs:
       - name: Set build env var for Windows
         if: matrix.os == 'windows-latest'
         run: |
-          set "OPENCV_LINK_PATHS=C:/tools/opencv/build/x64/vc16/lib,C:/tools/opencv/build/x64/vc15/lib" >> $GITHUB_ENV
-          set "OPENCV_LINK_LIBS=opencv_world${OPENCV_VERSION//./}" >> $GITHUB_ENV
-          set "OPENCV_INCLUDE_PATHS=C:/tools/opencv/build/include" >> $GITHUB_ENV
+          echo "OPENCV_LINK_PATHS=C:/tools/opencv/build/x64/vc16/lib,C:/tools/opencv/build/x64/vc15/lib" >> $GITHUB_ENV
+          echo "OPENCV_LINK_LIBS=opencv_world${OPENCV_VERSION//./}" >> $GITHUB_ENV
+          echo "OPENCV_INCLUDE_PATHS=C:/tools/opencv/build/include" >> $GITHUB_ENV
 
       - name: Set build env var for macOS
         if: matrix.os == 'macos-latest'
         run: |
           # see https://github.com/twistedfall/opencv-rust/blob/master/TROUBLESHOOTING.md
-          set "DYLD_FALLBACK_LIBRARY_PATH=$(xcode-select --print-path)/usr/lib/" >> $GITHUB_ENV
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$(xcode-select --print-path)/usr/lib/" >> $GITHUB_ENV
 
       - name: Run check
         if: matrix.os != 'macos-latest'
