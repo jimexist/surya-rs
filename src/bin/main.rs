@@ -2,12 +2,11 @@ use candle_core::{Device, IndexOp, Module};
 use candle_nn::VarBuilder;
 use clap::{Parser, ValueEnum};
 use hf_hub::api::sync::Api;
-use image::GenericImageView;
 use log::info;
-use opencv::imgproc;
 use std::path::PathBuf;
 use std::time::Instant;
-use surya::bbox::generate_bbox;
+use surya::bbox::{draw_bboxes, generate_bbox};
+use surya::convert::image_to_mat;
 use surya::preprocess::{heatmap_to_gray_image, load_image_tensor, read_resized_image};
 use surya::segformer::SemanticSegmentationModel;
 
@@ -141,37 +140,10 @@ fn main() -> anyhow::Result<()> {
     if args.generate_bbox_image {
         info!("generating bbox image");
         let image = image::io::Reader::open(args.image)?.decode()?;
-        let (width, height) = image.dimensions();
-        // for each box generate a red rectangle
-        let mut image = image.clone().to_rgb8();
-        let mut raw_pixels = image.into_raw();
-        info!("raw pixel size {}", raw_pixels.len());
-        // Create an OpenCV Mat from the raw bytes
-        let mut image = unsafe {
-            opencv::core::Mat::new_rows_cols_with_data(
-                height as i32,
-                width as i32,
-                opencv::core::CV_8UC3,
-                raw_pixels.as_mut_ptr() as *mut std::ffi::c_void,
-                opencv::core::Mat_AUTO_STEP,
-            )?
-        };
-        for bbox in bboxes {
-            imgproc::rectangle(
-                &mut image,
-                bbox,
-                opencv::core::Scalar::new(255., 0., 0., 0.),
-                2,
-                opencv::imgproc::LINE_8,
-                0,
-            )?;
-        }
-        let params = opencv::types::VectorOfi32::new();
-        opencv::imgcodecs::imwrite(
-            output_dir.join("bbox.png").to_str().unwrap(),
-            &image,
-            &params,
-        )?;
+        let mut image = image_to_mat(image)?;
+        let output_file = output_dir.join("bbox.png");
+        let output_file = output_file.to_str().expect("failed to convert to str");
+        draw_bboxes(&mut image, bboxes, output_file)?;
     }
 
     if args.generate_heatmap {
