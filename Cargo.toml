@@ -3,7 +3,7 @@ name = "surya"
 version = "0.2.0"
 edition = "2021"
 description = "Surya is a multilingual document OCR toolkit, original implementation in Python and PyTorch"
-license = "Apache 2.0"
+license = "Apache-2.0"
 repository = "https://github.com/jimexist/surya-rs"
 
 [dependencies]
