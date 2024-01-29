@@ -3,6 +3,7 @@ use candle_nn::VarBuilder;
 use clap::{Parser, ValueEnum};
 use hf_hub::api::sync::Api;
 use log::info;
+use opencv::imgproc;
 use std::path::PathBuf;
 use std::time::Instant;
 use surya::preprocess::{heatmap_to_gray_image, load_image_tensor, read_resized_image};
@@ -48,6 +49,8 @@ struct Args {
     weights_file_name: String,
     #[arg(long, default_value = "config.json", help = "model's config file name")]
     config_file_name: String,
+    #[arg(long, default_value_t = true, help = "whether to generate bbox image")]
+    generate_bbox_image: bool,
     #[arg(long, default_value_t = true, help = "whether to generate heatmap")]
     generate_heatmap: bool,
     #[arg(
@@ -98,8 +101,8 @@ fn main() -> anyhow::Result<()> {
     let device = args.device_type.try_into()?;
     info!("using device {:?}", device);
 
-    let (image, origin_size) = read_resized_image(&args.image)?;
-    info!("image original size (w, h)={origin_size:?}");
+    let (image, original_size) = read_resized_image(&args.image)?;
+    info!("image original size (w, h)={original_size:?}");
     let image = load_image_tensor(image, &device)?;
 
     // join the output dir with the input image's base name
@@ -121,17 +124,58 @@ fn main() -> anyhow::Result<()> {
     info!("inference took {:.3}s", now.elapsed().as_secs_f32());
     let segmentation = segmentation.squeeze(0)?;
 
+    let non_max_suppression_threshold = 0.35;
+    let extract_text_threshold = 0.6;
+    let bbox_area_threshold = 10;
+
+    let bboxes = generate_bbox(
+        original_size,
+        segmentation.i(0)?.to_vec2::<f32>()?,
+        non_max_suppression_threshold,
+        extract_text_threshold,
+        bbox_area_threshold,
+    )?;
+
+    if args.generate_bbox_image {
+        info!("generating bbox image");
+        let image = image::io::Reader::open(args.image)?.decode()?;
+        // for each box generate a red rectangle
+        let mut image = image.clone().to_rgb8();
+        let raw_pixels = image.into_raw();
+        // Create an OpenCV Mat from the raw bytes
+        let mut image = opencv::core::Mat::new_rows_cols_with_data(
+            original_size.1 as i32,
+            original_size.0 as i32,
+            opencv::core::CV_8UC3,
+            raw_pixels.as_slice(),
+            opencv::core::Mat_AUTO_STEP,
+        )?;
+        for bbox in bboxes {
+            imgproc::rectangle(
+                &mut image,
+                bbox,
+                opencv::core::Scalar::new(255., 0., 0., 0.),
+                2,
+                opencv::imgproc::LINE_8,
+                0,
+            )?;
+        }
+        // let imgbuf = surya::bbox::draw_bbox(&args.image, &bboxes)?;
+        image.save(output_dir.join("bbox.png"))?;
+    }
+
     if args.generate_heatmap {
         info!("generating heatmap");
         let heatmap = segmentation.i(0)?;
-        let imgbuf = heatmap_to_gray_image(heatmap, origin_size)?;
+        let imgbuf = heatmap_to_gray_image(heatmap, original_size)?;
         imgbuf.save(output_dir.join("heatmap.png"))?;
     }
     if args.generate_affinity_map {
         info!("generating affinity map");
         let affinity_map = segmentation.i(1)?;
-        let imgbuf = heatmap_to_gray_image(affinity_map, origin_size)?;
+        let imgbuf = heatmap_to_gray_image(affinity_map, original_size)?;
         imgbuf.save(output_dir.join("affinity_map.png"))?;
     }
+
     Ok(())
 }

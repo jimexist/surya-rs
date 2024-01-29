@@ -31,7 +31,11 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 Build and install the binary:
 
 ```bash
-# run this if you have a mac with M1/2/3 chip
+# run this first on Mac if you have a M1 chip
+export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/usr/lib/"
+# run this first on other Mac
+export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/"
+# run this if you have a mac with Metal support
 cargo install --path . --features=cli,metal --bin surya
 # run this on other architectures
 cargo install --path . --features=cli --bin surya
