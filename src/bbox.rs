@@ -1,9 +1,9 @@
-use log::{debug, info};
+use log::debug;
 use opencv::core::{
     max_mat_f64, min_mat_f64, Mat, Point, Point2f, Rect, RotatedRect, Scalar, Size,
 };
 use opencv::prelude::*;
-use opencv::{core, imgproc};
+use opencv::{core, imgcodecs, imgproc};
 
 #[derive(Debug, Clone)]
 pub struct BBox {
@@ -114,6 +114,22 @@ fn connected_area_to_bbox(
     let mut non_zero = Mat::default();
     core::find_non_zero(&dilated, &mut non_zero)?;
     imgproc::min_area_rect(&non_zero)
+}
+
+pub fn draw_bboxes(image: &mut Mat, bboxes: Vec<Rect>, output_file: &str) -> opencv::Result<()> {
+    for bbox in bboxes {
+        imgproc::rectangle(
+            image,
+            bbox,
+            opencv::core::Scalar::new(255., 0., 0., 0.),
+            2,
+            opencv::imgproc::LINE_8,
+            0,
+        )?;
+    }
+    let params = opencv::types::VectorOfi32::new();
+    imgcodecs::imwrite(output_file, image, &params)?;
+    Ok(())
 }
 
 pub fn generate_bbox(
