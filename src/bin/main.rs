@@ -2,10 +2,12 @@ use candle_core::{Device, IndexOp, Module};
 use candle_nn::VarBuilder;
 use clap::{Parser, ValueEnum};
 use hf_hub::api::sync::Api;
+use image::GenericImageView;
 use log::info;
 use opencv::imgproc;
 use std::path::PathBuf;
 use std::time::Instant;
+use surya::bbox::generate_bbox;
 use surya::preprocess::{heatmap_to_gray_image, load_image_tensor, read_resized_image};
 use surya::segformer::SemanticSegmentationModel;
 
@@ -139,17 +141,21 @@ fn main() -> anyhow::Result<()> {
     if args.generate_bbox_image {
         info!("generating bbox image");
         let image = image::io::Reader::open(args.image)?.decode()?;
+        let (width, height) = image.dimensions();
         // for each box generate a red rectangle
         let mut image = image.clone().to_rgb8();
-        let raw_pixels = image.into_raw();
+        let mut raw_pixels = image.into_raw();
+        info!("raw pixel size {}", raw_pixels.len());
         // Create an OpenCV Mat from the raw bytes
-        let mut image = opencv::core::Mat::new_rows_cols_with_data(
-            original_size.1 as i32,
-            original_size.0 as i32,
-            opencv::core::CV_8UC3,
-            raw_pixels.as_slice(),
-            opencv::core::Mat_AUTO_STEP,
-        )?;
+        let mut image = unsafe {
+            opencv::core::Mat::new_rows_cols_with_data(
+                height as i32,
+                width as i32,
+                opencv::core::CV_8UC3,
+                raw_pixels.as_mut_ptr() as *mut std::ffi::c_void,
+                opencv::core::Mat_AUTO_STEP,
+            )?
+        };
         for bbox in bboxes {
             imgproc::rectangle(
                 &mut image,
@@ -160,8 +166,12 @@ fn main() -> anyhow::Result<()> {
                 0,
             )?;
         }
-        // let imgbuf = surya::bbox::draw_bbox(&args.image, &bboxes)?;
-        image.save(output_dir.join("bbox.png"))?;
+        let params = opencv::types::VectorOfi32::new();
+        opencv::imgcodecs::imwrite(
+            output_dir.join("bbox.png").to_str().unwrap(),
+            &image,
+            &params,
+        )?;
     }
 
     if args.generate_heatmap {
