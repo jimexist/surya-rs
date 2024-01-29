@@ -11,9 +11,11 @@ This project is still in development, feel free to star and check back.
 
 - [x] model structure, segformer (for inference only)
 - [x] weights loading
-- [ ] image input pre-processing
-- [ ] heatmap and bboxes
+- [x] image input pre-processing
+- [x] heatmap and affinity map
+- [ ] bboxes
 - [ ] text recognition
+- [ ] image splitting and stitching
 - [ ] benchmark
 - [ ] quantifications
 
@@ -40,18 +42,32 @@ The binary when built does _not_ include the weights file itself, and will inste
 Check `-h` for help:
 
 ```text
-❯ surya --help
 Surya is a multilingual document OCR toolkit, original implementation in Python and PyTorch
 
-Usage: surya [OPTIONS] --image <IMAGE>
+Usage: surya [OPTIONS] <IMAGE>
+
+Arguments:
+  <IMAGE>  path to image
 
 Options:
-      --image <IMAGE>                path to image
-      --model-repo <MODEL_REPO>      model's hugging face repo [default: vikp/line_detector]
-      --weights-name <WEIGHTS_NAME>  model's weights name [default: model.safetensors]
-      --device-type <DEVICE_TYPE>    [default: cpu] [possible values: cpu, gpu, metal]
-  -h, --help                         Print help
-  -V, --version                      Print version
+      --model-repo <MODEL_REPO>
+          model's hugging face repo [default: vikp/line_detector]
+      --weights-file-name <WEIGHTS_FILE_NAME>
+          model's weights file name [default: model.safetensors]
+      --config-file-name <CONFIG_FILE_NAME>
+          model's config file name [default: config.json]
+      --generate-heatmap
+          whether to generate heatmap
+      --generate-affinity-map
+          whether to generate affinity map
+      --output-dir <OUTPUT_DIR>
+          output directory, each file will be generating a subdirectory under this directory [default: ./surya_output]
+      --device-type <DEVICE_TYPE>
+          [default: cpu] [possible values: cpu, gpu, metal]
+  -h, --help
+          Print help
+  -V, --version
+          Print version
 ```
 
 You can use this to control logging level:
