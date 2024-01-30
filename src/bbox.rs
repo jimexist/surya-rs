@@ -111,7 +111,7 @@ fn get_dilation_matrix(segmap: &mut Mat, stats_row: &[i32]) -> opencv::Result<Ma
         let ey = (y + h + niter + 1).min(segmap.rows());
         Rect::new(sx, sy, ex - sx, ey - sy)
     };
-    let mut roi = Mat::roi(&segmap, roi)?;
+    let mut roi = Mat::roi(segmap, roi)?;
     let kernel = imgproc::get_structuring_element(
         imgproc::MORPH_RECT,
         Size::new(1 + niter, 1 + niter),

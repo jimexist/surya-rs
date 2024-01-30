@@ -21,11 +21,11 @@ image = { version = "0.24.8", default-features = false, features = [
 log = { version = "0.4.20" }
 opencv = { version = "0.88.8" }
 serde = { version = "1.0.196" }
-serde_json = { version = "1.0.112", optional = true }
+serde_json = { version = "1.0.112" }
 
 [features]
 metal = ["candle-core/metal", "candle-nn/metal"]
-cli = ["clap", "anyhow", "hf-hub", "serde_json"]
+cli = ["clap", "anyhow", "hf-hub"]
 
 [[bin]]
 name = "surya"
