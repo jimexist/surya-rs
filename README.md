@@ -60,6 +60,8 @@ Options:
           model's weights file name [default: model.safetensors]
       --config-file-name <CONFIG_FILE_NAME>
           model's config file name [default: config.json]
+      --generate-bbox-image
+          whether to generate bbox image
       --generate-heatmap
           whether to generate heatmap
       --generate-affinity-map
