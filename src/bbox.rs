@@ -1,7 +1,6 @@
 use log::debug;
 use opencv::core::{
-    self, max_mat_f64, min_mat_f64, Mat, Point, Point2f, Rect, RotatedRect, Scalar, Size, Vector,
-    CV_32S, CV_8U,
+    self, max_mat_f64, min_mat_f64, Mat, Point, Point2f, Rect, Scalar, Size, Vector, CV_32S, CV_8U,
 };
 use opencv::prelude::*;
 use opencv::types::VectorOfi32;
@@ -9,32 +8,28 @@ use opencv::{imgcodecs, imgproc};
 
 #[derive(Debug, Clone)]
 pub struct BBox {
-    pub rect: RotatedRect,
+    pub polygon: [Point2f; 4],
 }
 
 impl BBox {
-    fn scale_to_rect(&self, original_size: (u32, u32), heatmap: &Mat) -> opencv::Result<Self> {
+    fn scale_to_original(&self, original_size: (u32, u32), heatmap: &Mat) -> opencv::Result<Self> {
         let (width, height) = original_size;
         let w_scaler = width as f32 / heatmap.cols() as f32;
         let h_scaler = height as f32 / heatmap.rows() as f32;
-        let mut point_2fs = [Point2f::default(); 4];
-        self.rect.points(&mut point_2fs)?;
-        let mut points = [Point2f::default(); 4];
-        for (i, point_2f) in point_2fs.iter().enumerate() {
-            points[i] = Point2f::new(point_2f.x * w_scaler, point_2f.y * h_scaler);
+        let mut polygon = [Point2f::default(); 4];
+        for (i, point_2f) in self.polygon.iter().enumerate() {
+            polygon[i] = Point2f::new(point_2f.x * w_scaler, point_2f.y * h_scaler);
         }
-        let rect = RotatedRect::for_points(points[0], points[1], points[2])?;
-        Ok(BBox { rect })
+        Ok(BBox { polygon })
     }
 
     fn draw_on_image(&self, image: &mut Mat) -> opencv::Result<()> {
-        let mut points = [Point2f::default(); 4];
-        self.rect.points(&mut points)?;
         // convert each point from Point2f to Point
-        let points = points
+        let points: Vector<Point> = self
+            .polygon
             .iter()
-            .map(|point| Point::new(point.x as i32, point.y as i32))
-            .collect::<Vector<Point>>();
+            .map(|point| point.to::<i32>().unwrap())
+            .collect();
         imgproc::polylines(
             image,
             &points,
@@ -138,7 +133,7 @@ fn connected_area_to_bbox(
     labels: &Mat,
     stats_row: &[i32],
     label: i32,
-) -> opencv::Result<RotatedRect> {
+) -> opencv::Result<[Point2f; 4]> {
     let mut segmap = Mat::default();
     core::compare(&labels, &(label as f64), &mut segmap, opencv::core::CMP_EQ)?;
 
@@ -147,7 +142,10 @@ fn connected_area_to_bbox(
 
     let mut non_zero = Mat::default();
     core::find_non_zero(&segmap, &mut non_zero)?;
-    imgproc::min_area_rect(&non_zero)
+    let rotated_rect = imgproc::min_area_rect(&non_zero)?;
+    let mut points = [Point2f::default(); 4];
+    rotated_rect.points(&mut points)?;
+    Ok(points)
 }
 
 pub fn draw_bboxes(image: &mut Mat, bboxes: Vec<BBox>, output_file: &str) -> opencv::Result<()> {
@@ -195,8 +193,8 @@ pub fn generate_bbox(
         if max_value < text_threshold {
             continue;
         }
-        let rect = connected_area_to_bbox(&labels, stats_row, label)?;
-        bboxes.push(BBox { rect }.scale_to_rect(original_size, &heatmap)?);
+        let polygon = connected_area_to_bbox(&labels, stats_row, label)?;
+        bboxes.push(BBox { polygon }.scale_to_original(original_size, &heatmap)?);
     }
     Ok(bboxes)
 }
