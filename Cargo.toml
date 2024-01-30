@@ -5,6 +5,7 @@ edition = "2021"
 description = "Surya is a multilingual document OCR toolkit, original implementation in Python and PyTorch"
 license = "Apache-2.0"
 repository = "https://github.com/jimexist/surya-rs"
+default-run = "surya"
 
 [dependencies]
 anyhow = { version = "1.0.79", optional = true }
@@ -12,20 +13,19 @@ candle-core = { version = "0.3.2" }
 candle-nn = { version = "0.3.2" }
 clap = { version = "4.4.18", features = ["derive"], optional = true }
 env_logger = { version = "0.11.0" }
-hf-hub = { version = "0.3.2", optional = true }
-image = { version = "0.24.8", default-features = false, features = [
-  "jpeg",
-  "webp",
-  "png",
-] }
+hf-hub = { version = "0.3.2" }
 log = { version = "0.4.20" }
-opencv = { version = "0.88.8" }
+opencv = { version = "0.88.8", default-features = false, features = [
+  'imgproc',
+  'imgcodecs',
+] }
 serde = { version = "1.0.196" }
 serde_json = { version = "1.0.112" }
+thiserror = "1.0.56"
 
 [features]
 metal = ["candle-core/metal", "candle-nn/metal"]
-cli = ["clap", "anyhow", "hf-hub"]
+cli = ["clap", "anyhow"]
 
 [[bin]]
 name = "surya"

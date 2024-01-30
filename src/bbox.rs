@@ -1,6 +1,8 @@
+use std::path::PathBuf;
+
 use log::debug;
 use opencv::core::{
-    self, max_mat_f64, min_mat_f64, Mat, Point, Point2f, Rect, Scalar, Size, Vector, CV_32S, CV_8U,
+    self, max_mat_f64, min_mat_f64, Mat, Point, Point2f, Rect, Scalar, Size, Vector, CV_32S,
 };
 use opencv::prelude::*;
 use opencv::types::VectorOfi32;
@@ -12,10 +14,9 @@ pub struct BBox {
 }
 
 impl BBox {
-    fn scale_to_original(&self, original_size: (u32, u32), heatmap: &Mat) -> opencv::Result<Self> {
-        let (width, height) = original_size;
-        let w_scaler = width as f32 / heatmap.cols() as f32;
-        let h_scaler = height as f32 / heatmap.rows() as f32;
+    fn scale_to_original(&self, original_size: core::Size, heatmap: &Mat) -> crate::Result<Self> {
+        let w_scaler = original_size.width as f32 / heatmap.cols() as f32;
+        let h_scaler = original_size.height as f32 / heatmap.rows() as f32;
         let mut polygon = [Point2f::default(); 4];
         for (i, point_2f) in self.polygon.iter().enumerate() {
             polygon[i] = Point2f::new(point_2f.x * w_scaler, point_2f.y * h_scaler);
@@ -23,7 +24,7 @@ impl BBox {
         Ok(BBox { polygon })
     }
 
-    fn draw_on_image(&self, image: &mut Mat) -> opencv::Result<()> {
+    fn draw_on_image(&self, image: &mut Mat) -> crate::Result<()> {
         // convert each point from Point2f to Point
         let points: Vector<Point> = self
             .polygon
@@ -35,7 +36,7 @@ impl BBox {
             &points,
             true,
             Scalar::new(0., 0., 255., 0.),
-            2,
+            1,
             opencv::imgproc::LINE_8,
             0,
         )?;
@@ -44,7 +45,7 @@ impl BBox {
 }
 
 /// https://docs.rs/opencv/0.88.8/opencv/imgproc/fn.threshold.html
-fn image_threshold(mat: Mat, non_max_suppression_threshold: f64) -> opencv::Result<Mat> {
+fn image_threshold(mat: Mat, non_max_suppression_threshold: f64) -> crate::Result<Mat> {
     let mut r = Mat::default();
     let max_val = 1.0;
     imgproc::threshold(
@@ -60,16 +61,16 @@ fn image_threshold(mat: Mat, non_max_suppression_threshold: f64) -> opencv::Resu
 }
 
 /// https://docs.rs/opencv/0.88.8/opencv/prelude/trait.MatTraitConst.html#method.convert_to
-fn image_f32_to_u8(mat: Mat) -> opencv::Result<Mat> {
+fn image_f32_to_u8(mat: Mat) -> crate::Result<Mat> {
     let mut r = Mat::default();
     let alpha = 255.0;
     let beta = 0.0;
-    mat.convert_to(&mut r, CV_8U, alpha, beta)?;
+    mat.convert_to(&mut r, core::CV_8UC1, alpha, beta)?;
     Ok(r)
 }
 
 /// https://docs.rs/opencv/0.88.8/opencv/imgproc/fn.connected_components.html
-fn image_to_connected_components(mat: Mat) -> opencv::Result<(Mat, Mat, Mat)> {
+fn image_to_connected_components(mat: Mat) -> crate::Result<(Mat, Mat, Mat)> {
     let mut labels: Mat = Default::default();
     let mut stats: Mat = Default::default();
     let mut centroids: Mat = Default::default();
@@ -84,7 +85,7 @@ fn image_to_connected_components(mat: Mat) -> opencv::Result<(Mat, Mat, Mat)> {
     Ok((labels, stats, centroids))
 }
 
-fn heatmap_label_max(heatmap: &Mat, labels: &Mat, label: i32) -> opencv::Result<f64> {
+fn heatmap_label_max(heatmap: &Mat, labels: &Mat, label: i32) -> crate::Result<f64> {
     let mut mask = Mat::default();
     core::compare(labels, &(label as f64), &mut mask, opencv::core::CMP_EQ)?;
     let mut max_value = 0.0;
@@ -92,7 +93,7 @@ fn heatmap_label_max(heatmap: &Mat, labels: &Mat, label: i32) -> opencv::Result<
     Ok(max_value)
 }
 
-fn get_dilation_matrix(segmap: &mut Mat, stats_row: &[i32]) -> opencv::Result<Mat> {
+fn get_dilation_matrix(segmap: &mut Mat, stats_row: &[i32]) -> crate::Result<Mat> {
     let (x, y, w, h, area) = (
         stats_row[imgproc::CC_STAT_LEFT as usize],
         stats_row[imgproc::CC_STAT_TOP as usize],
@@ -133,7 +134,7 @@ fn connected_area_to_bbox(
     labels: &Mat,
     stats_row: &[i32],
     label: i32,
-) -> opencv::Result<[Point2f; 4]> {
+) -> crate::Result<[Point2f; 4]> {
     let mut segmap = Mat::default();
     core::compare(&labels, &(label as f64), &mut segmap, opencv::core::CMP_EQ)?;
 
@@ -148,23 +149,23 @@ fn connected_area_to_bbox(
     Ok(points)
 }
 
-pub fn draw_bboxes(image: &mut Mat, bboxes: Vec<BBox>, output_file: &str) -> opencv::Result<()> {
+pub fn draw_bboxes(image: &mut Mat, bboxes: Vec<BBox>, output_file: PathBuf) -> crate::Result<()> {
     for bbox in bboxes {
         bbox.draw_on_image(image)?;
     }
     let params = VectorOfi32::new();
-    imgcodecs::imwrite(output_file, image, &params)?;
+    imgcodecs::imwrite(output_file.as_os_str().to_str().unwrap(), image, &params)?;
     Ok(())
 }
 
 /// generate bbox from heatmap which are rescaled to original size
 pub fn generate_bbox(
-    original_size: (u32, u32),
+    original_size: core::Size,
     heatmap: Vec<Vec<f32>>,
     non_max_suppression_threshold: f64,
     text_threshold: f64,
     bbox_area_threshold: i32,
-) -> opencv::Result<Vec<BBox>> {
+) -> crate::Result<Vec<BBox>> {
     let heatmap = Mat::from_slice_2d(&heatmap)?;
     let labels = image_threshold(heatmap.clone(), non_max_suppression_threshold)?;
     let labels = image_f32_to_u8(labels)?;
