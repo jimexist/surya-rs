@@ -39,13 +39,13 @@ pub fn read_chunked_resized_image<P: AsRef<Path>>(image_path: P) -> crate::Resul
     let original_size = core::Size::new(image.cols(), image.rows());
 
     let num_chunks = (original_size.height as f32 / IMAGE_CHUNK_HEIGHT as f32).ceil() as usize;
-    assert!(num_chunks > 0, "image must have at least one chunk");
+    debug_assert!(num_chunks > 0, "image must have at least one chunk");
 
     // pad the image with black pixels to make it divisible by chunk_height
     let mut padding: i32 = original_size.height % IMAGE_CHUNK_HEIGHT;
     if padding > 0 {
         padding = IMAGE_CHUNK_HEIGHT - padding;
-        assert!(padding > 0, "padding must be (still) greater than 0");
+        debug_assert!(padding > 0, "padding must be (still) greater than 0");
     }
     debug!(
         "image size is (w, h)=({}, {}), padding with {}",
@@ -68,7 +68,7 @@ pub fn read_chunked_resized_image<P: AsRef<Path>>(image_path: P) -> crate::Resul
     } else {
         image
     };
-    assert_eq!(
+    debug_assert_eq!(
         image.rows() % IMAGE_CHUNK_HEIGHT,
         0,
         "image height must be divisible by {}",
@@ -127,7 +127,7 @@ pub fn image_to_tensor(input: &Mat, device: &Device) -> crate::Result<Tensor> {
 
 fn heatmap_tensor_to_mat(heatmap: Tensor) -> crate::Result<Mat> {
     let (height, width) = heatmap.dims2()?;
-    assert_eq!(height, width, "original heatmap must be square");
+    debug_assert_eq!(height, width, "original heatmap must be square");
     let heatmap: Vec<Vec<f32>> = heatmap.to_vec2()?;
     let mut img =
         unsafe { Mat::new_size(core::Size::new(width as i32, height as i32), core::CV_32F)? };

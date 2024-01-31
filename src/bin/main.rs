@@ -7,7 +7,7 @@ use opencv::hub_prelude::MatTraitConst;
 use std::path::PathBuf;
 use std::time::Instant;
 use surya::bbox::{draw_bboxes, generate_bbox};
-use surya::postprocess::save_grayscale_image;
+use surya::postprocess::save_grayscale_image_with_resize;
 use surya::preprocess::{image_to_tensor, read_chunked_resized_image, read_image};
 use surya::segformer::SemanticSegmentationModel;
 
@@ -104,10 +104,6 @@ fn main() -> surya::Result<()> {
     info!("using device {:?}", device);
 
     let image_chunks = read_chunked_resized_image(&args.image)?;
-    debug!(
-        "image original size (w, h)={:?}, padding={:?}",
-        image_chunks.original_size, image_chunks.padding
-    );
 
     // join the output dir with the input image's base name
     let output_dir = args.image.file_stem().expect("failed to get file stem");
@@ -160,28 +156,27 @@ fn main() -> surya::Result<()> {
 
     if args.generate_bbox_image {
         let mut image = read_image(args.image)?;
-        debug!("image size {:?}", image.size()?);
         let output_file = output_dir.join("bbox.png");
         draw_bboxes(
             &mut image,
             heatmap.size()?,
             image_chunks.original_size_with_padding,
             bboxes,
-            output_file,
+            &output_file,
         )?;
-        info!("bbox image generated");
+        info!("bbox image {:?} generated", output_file);
     }
 
     if args.generate_heatmap {
         let output_file = output_dir.join("heatmap.png");
-        save_grayscale_image(&heatmap, output_file)?;
-        info!("heatmap generated");
+        save_grayscale_image_with_resize(&heatmap, image_chunks.original_size, &output_file)?;
+        info!("heatmap image {:?} generated", output_file);
     }
 
     if args.generate_affinity_map {
         let output_file = output_dir.join("affinity_map.png");
-        save_grayscale_image(&affinity_map, output_file)?;
-        info!("affinity map generated");
+        save_grayscale_image_with_resize(&affinity_map, image_chunks.original_size, &output_file)?;
+        info!("affinity map image {:?} generated", output_file);
     }
 
     Ok(())

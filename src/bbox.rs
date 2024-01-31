@@ -5,7 +5,7 @@ use opencv::core::{
 use opencv::prelude::*;
 use opencv::types::VectorOfi32;
 use opencv::{imgcodecs, imgproc};
-use std::path::PathBuf;
+use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub struct BBox {
@@ -155,12 +155,12 @@ fn connected_area_to_bbox(
     Ok(points)
 }
 
-pub fn draw_bboxes(
+pub fn draw_bboxes<P: AsRef<Path>>(
     image: &mut Mat,
     heatmap_size: Size,
     image_with_padding_size: Size,
     bboxes: Vec<BBox>,
-    output_file: PathBuf,
+    output_file: P,
 ) -> crate::Result<()> {
     debug!(
         "image size={:?}, heatmap_size={:?}, image_with_padding_size={:?}",
@@ -173,7 +173,11 @@ pub fn draw_bboxes(
             .draw_on_image(image)?;
     }
     let params = VectorOfi32::new();
-    imgcodecs::imwrite(output_file.as_os_str().to_str().unwrap(), image, &params)?;
+    imgcodecs::imwrite(
+        output_file.as_ref().as_os_str().to_str().unwrap(),
+        image,
+        &params,
+    )?;
     Ok(())
 }
 
@@ -191,13 +195,13 @@ pub fn generate_bbox(
     debug!("stats {:?}", stats);
     debug!("centroids {:?}", centroids);
 
-    assert_eq!(
+    debug_assert_eq!(
         centroids.rows(),
         stats.rows(),
         "centroids and stats rows must be equal"
     );
-    assert_eq!(5, stats.cols(), "stats must have 5 columns");
-    assert_eq!(2, centroids.cols(), "centroids must have 2 columns");
+    debug_assert_eq!(5, stats.cols(), "stats must have 5 columns");
+    debug_assert_eq!(2, centroids.cols(), "centroids must have 2 columns");
 
     let mut bboxes = Vec::new();
     // 0 is background so skip it
