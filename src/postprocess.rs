@@ -1,17 +1,16 @@
-use std::path::PathBuf;
-
 use opencv::core::{self, Mat};
 use opencv::imgcodecs;
-use opencv::imgproc;
+use opencv::prelude::MatTraitConst;
+use std::path::PathBuf;
 
-/// convert a rgb image to mat
-pub fn save_image(image: &Mat, output_path: PathBuf) -> crate::Result<()> {
-    let mut output = Mat::default();
-    // Convert the image to BGR (OpenCV writes images in BGR format by default)
-    imgproc::cvt_color(&image, &mut output, imgproc::COLOR_RGB2BGR, 0)?;
+/// save a grayscale image to an image
+pub fn save_grayscale_image(image: &Mat, output_path: PathBuf) -> crate::Result<()> {
+    // convert image 0..1 to 255 grayscale image
+    let mut gray_scale_image = Mat::default();
+    image.convert_to(&mut gray_scale_image, core::CV_8UC1, 255.0, 0.0)?;
     imgcodecs::imwrite(
         output_path.as_os_str().to_str().unwrap(),
-        &output,
+        &gray_scale_image,
         &core::Vector::new(),
     )?;
     Ok(())
