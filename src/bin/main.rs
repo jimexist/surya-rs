@@ -1,13 +1,14 @@
-use candle_core::{Device, IndexOp, Module};
+use candle_core::{Device, IndexOp, Module, Tensor};
 use candle_nn::VarBuilder;
 use clap::{Parser, ValueEnum};
 use hf_hub::api::sync::Api;
-use log::info;
+use log::{debug, info};
+use opencv::hub_prelude::MatTraitConst;
 use std::path::PathBuf;
 use std::time::Instant;
 use surya::bbox::{draw_bboxes, generate_bbox};
-use surya::postprocess::save_image;
-use surya::preprocess::{heatmap_to_gray_image, image_to_tensor, read_image, read_resized_image};
+use surya::postprocess::save_grayscale_image_with_resize;
+use surya::preprocess::{image_to_tensor, read_chunked_resized_image, read_image};
 use surya::segformer::SemanticSegmentationModel;
 
 #[derive(Debug, ValueEnum, Clone, Copy)]
@@ -102,9 +103,7 @@ fn main() -> surya::Result<()> {
     let device = args.device_type.try_into()?;
     info!("using device {:?}", device);
 
-    let (image, original_size) = read_resized_image(&args.image)?;
-    info!("image original size (w, h)={original_size:?}");
-    let image_tensor = image_to_tensor(&image, &device)?;
+    let image_chunks = read_chunked_resized_image(&args.image)?;
 
     // join the output dir with the input image's base name
     let output_dir = args.image.file_stem().expect("failed to get file stem");
@@ -115,19 +114,41 @@ fn main() -> surya::Result<()> {
     info!("generating output to {:?}", output_dir);
 
     let model = args.get_model(&device, NUM_LABELS)?;
-    let input = image_tensor.unsqueeze(0)?;
-    let now = Instant::now();
-    let segmentation = model.forward(&input)?;
-    info!("inference took {:.3}s", now.elapsed().as_secs_f32());
 
-    let segmentation = segmentation.squeeze(0)?;
+    let batch_size = 2;
+    let image_tensors: Vec<Tensor> = image_chunks
+        .resized_chunks
+        .iter()
+        .map(|img| image_to_tensor(img, &device))
+        .collect::<surya::Result<_>>()?;
+
+    let mut heatmaps = Vec::new();
+    let mut affinity_maps = Vec::new();
+    for batch in image_tensors.chunks(batch_size) {
+        let batch = Tensor::stack(batch, 0)?;
+        let now = Instant::now();
+        let segmentation = model.forward(&batch)?;
+        info!("inference took {:.3}s", now.elapsed().as_secs_f32());
+        for i in 0..batch_size {
+            let heatmap: Tensor = segmentation.i(i)?.squeeze(0)?.i(0)?;
+            let affinity_map: Tensor = segmentation.i(i)?.squeeze(0)?.i(1)?;
+            heatmaps.push(heatmap);
+            affinity_maps.push(affinity_map);
+        }
+    }
+
+    let heatmap = image_chunks.stitch_image_tensors(heatmaps)?;
+    let affinity_map = image_chunks.stitch_image_tensors(affinity_maps)?;
+
+    debug!("heatmap {:?}", heatmap);
+    debug!("affinity_map {:?}", affinity_map);
+
     let non_max_suppression_threshold = 0.35;
     let extract_text_threshold = 0.6;
     let bbox_area_threshold = 10;
 
     let bboxes = generate_bbox(
-        original_size,
-        segmentation.i(0)?.to_vec2::<f32>()?,
+        &heatmap,
         non_max_suppression_threshold,
         extract_text_threshold,
         bbox_area_threshold,
@@ -136,24 +157,26 @@ fn main() -> surya::Result<()> {
     if args.generate_bbox_image {
         let mut image = read_image(args.image)?;
         let output_file = output_dir.join("bbox.png");
-        draw_bboxes(&mut image, bboxes, output_file)?;
-        info!("bbox image generated");
+        draw_bboxes(
+            &mut image,
+            heatmap.size()?,
+            image_chunks.original_size_with_padding,
+            bboxes,
+            &output_file,
+        )?;
+        info!("bbox image {:?} generated", output_file);
     }
 
     if args.generate_heatmap {
-        let heatmap = segmentation.i(0)?;
-        let imgbuf = heatmap_to_gray_image(heatmap, original_size)?;
         let output_file = output_dir.join("heatmap.png");
-        save_image(&imgbuf, output_file)?;
-        info!("heatmap generated");
+        save_grayscale_image_with_resize(&heatmap, image_chunks.original_size, &output_file)?;
+        info!("heatmap image {:?} generated", output_file);
     }
 
     if args.generate_affinity_map {
-        let affinity_map = segmentation.i(1)?;
-        let imgbuf = heatmap_to_gray_image(affinity_map, original_size)?;
         let output_file = output_dir.join("affinity_map.png");
-        save_image(&imgbuf, output_file)?;
-        info!("affinity map generated");
+        save_grayscale_image_with_resize(&affinity_map, image_chunks.original_size, &output_file)?;
+        info!("affinity map image {:?} generated", output_file);
     }
 
     Ok(())

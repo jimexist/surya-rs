@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use log::debug;
 use opencv::core::{
     self, max_mat_f64, min_mat_f64, Mat, Point, Point2f, Rect, Scalar, Size, Vector, CV_32S,
@@ -7,6 +5,7 @@ use opencv::core::{
 use opencv::prelude::*;
 use opencv::types::VectorOfi32;
 use opencv::{imgcodecs, imgproc};
+use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub struct BBox {
@@ -14,22 +13,29 @@ pub struct BBox {
 }
 
 impl BBox {
-    fn scale_to_original(&self, original_size: core::Size, heatmap: &Mat) -> crate::Result<Self> {
-        let w_scaler = original_size.width as f32 / heatmap.cols() as f32;
-        let h_scaler = original_size.height as f32 / heatmap.rows() as f32;
+    fn rescale(&self, heatmap_size: Size, image_with_padding_size: Size) -> crate::Result<Self> {
+        let (h_scaler, w_scaler) = (
+            image_with_padding_size.height as f32 / heatmap_size.height as f32,
+            image_with_padding_size.width as f32 / heatmap_size.width as f32,
+        );
         let mut polygon = [Point2f::default(); 4];
-        for (i, point_2f) in self.polygon.iter().enumerate() {
-            polygon[i] = Point2f::new(point_2f.x * w_scaler, point_2f.y * h_scaler);
+        for (i, point) in self.polygon.iter().enumerate() {
+            let x = point.x * w_scaler;
+            let y = point.y * h_scaler;
+            polygon[i] = Point2f::new(x, y);
         }
-        Ok(BBox { polygon })
+        Ok(Self { polygon })
     }
 
     fn draw_on_image(&self, image: &mut Mat) -> crate::Result<()> {
-        // convert each point from Point2f to Point
         let points: Vector<Point> = self
             .polygon
             .iter()
-            .map(|point| point.to::<i32>().unwrap())
+            .map(|point| {
+                let x = point.x as i32;
+                let y = point.y as i32;
+                Point::new(x, y)
+            })
             .collect();
         imgproc::polylines(
             image,
@@ -45,7 +51,7 @@ impl BBox {
 }
 
 /// https://docs.rs/opencv/0.88.8/opencv/imgproc/fn.threshold.html
-fn image_threshold(mat: Mat, non_max_suppression_threshold: f64) -> crate::Result<Mat> {
+fn image_threshold(mat: &Mat, non_max_suppression_threshold: f64) -> crate::Result<Mat> {
     let mut r = Mat::default();
     let max_val = 1.0;
     imgproc::threshold(
@@ -149,38 +155,53 @@ fn connected_area_to_bbox(
     Ok(points)
 }
 
-pub fn draw_bboxes(image: &mut Mat, bboxes: Vec<BBox>, output_file: PathBuf) -> crate::Result<()> {
+pub fn draw_bboxes<P: AsRef<Path>>(
+    image: &mut Mat,
+    heatmap_size: Size,
+    image_with_padding_size: Size,
+    bboxes: Vec<BBox>,
+    output_file: P,
+) -> crate::Result<()> {
+    debug!(
+        "image size={:?}, heatmap_size={:?}, image_with_padding_size={:?}",
+        image.size()?,
+        heatmap_size,
+        image_with_padding_size
+    );
     for bbox in bboxes {
-        bbox.draw_on_image(image)?;
+        bbox.rescale(heatmap_size, image_with_padding_size)?
+            .draw_on_image(image)?;
     }
     let params = VectorOfi32::new();
-    imgcodecs::imwrite(output_file.as_os_str().to_str().unwrap(), image, &params)?;
+    imgcodecs::imwrite(
+        output_file.as_ref().as_os_str().to_str().unwrap(),
+        image,
+        &params,
+    )?;
     Ok(())
 }
 
 /// generate bbox from heatmap which are rescaled to original size
 pub fn generate_bbox(
-    original_size: core::Size,
-    heatmap: Vec<Vec<f32>>,
+    heatmap: &Mat,
     non_max_suppression_threshold: f64,
     text_threshold: f64,
     bbox_area_threshold: i32,
 ) -> crate::Result<Vec<BBox>> {
-    let heatmap = Mat::from_slice_2d(&heatmap)?;
-    let labels = image_threshold(heatmap.clone(), non_max_suppression_threshold)?;
+    let labels = image_threshold(heatmap, non_max_suppression_threshold)?;
     let labels = image_f32_to_u8(labels)?;
     let (labels, stats, centroids) = image_to_connected_components(labels)?;
     debug!("labels {:?}", labels);
     debug!("stats {:?}", stats);
     debug!("centroids {:?}", centroids);
 
-    assert_eq!(
+    debug_assert_eq!(
         centroids.rows(),
         stats.rows(),
         "centroids and stats rows must be equal"
     );
-    assert_eq!(5, stats.cols(), "stats must have 5 columns");
-    assert_eq!(2, centroids.cols(), "centroids must have 2 columns");
+    debug_assert_eq!(5, stats.cols(), "stats must have 5 columns");
+    debug_assert_eq!(2, centroids.cols(), "centroids must have 2 columns");
 
     let mut bboxes = Vec::new();
     // 0 is background so skip it
@@ -195,7 +216,12 @@ pub fn generate_bbox(
             continue;
         }
         let polygon = connected_area_to_bbox(&labels, stats_row, label)?;
-        bboxes.push(BBox { polygon }.scale_to_original(original_size, &heatmap)?);
+        bboxes.push(BBox { polygon });
     }
+    debug!(
+        "bbox filtering, before={}, after={} bboxes",
+        stats.rows(),
+        bboxes.len()
+    );
     Ok(bboxes)
 }
