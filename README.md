@@ -1,9 +1,12 @@
 # surya-rs
 
 [![Build](https://github.com/Jimexist/surya-rs/actions/workflows/builld.yaml/badge.svg)](https://github.com/Jimexist/surya-rs/actions/workflows/builld.yaml)
-![Crates.io Version](https://img.shields.io/crates/v/surya)
+[![Crates.io Version](https://img.shields.io/crates/v/surya)](https://crates.io/crates/surya)
 
-Rust implementation of [surya][surya], a multilingual document OCR toolkit. The implementation is based on a modified version of Segformer.
+Rust implementation of [surya][surya], a multilingual document OCR toolkit.
+The implementation is based on a modified version of Segformer and [OpenCV][opencv].
+
+Please refer to the original project for more details on licensing of the weights.
 
 ## Roadmap
 
@@ -13,9 +16,9 @@ This project is still in development, feel free to star and check back.
 - [x] weights loading
 - [x] image input pre-processing
 - [x] heatmap and affinity map
-- [ ] bboxes
+- [x] bboxes
+- [x] image splitting and stitching
 - [ ] text recognition
-- [ ] image splitting and stitching
 - [ ] benchmark
 - [ ] quantifications
 
@@ -87,3 +90,4 @@ export RUST_LOG=info # or debug, warn, etc.
 This lib is also published as a trait for other rust projects to use.
 
 [surya]: https://github.com/VikParuchuri/surya
+[opencv]: https://crates.io/crates/opencv

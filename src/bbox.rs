@@ -211,7 +211,7 @@ pub fn generate_bbox(
         if area < bbox_area_threshold {
             continue;
         }
-        let max_value = heatmap_label_max(&heatmap, &labels, label)?;
+        let max_value = heatmap_label_max(heatmap, &labels, label)?;
         if max_value < text_threshold {
             continue;
         }
