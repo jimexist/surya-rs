@@ -6,8 +6,8 @@ use log::info;
 use std::path::PathBuf;
 use std::time::Instant;
 use surya::bbox::{draw_bboxes, generate_bbox};
-use surya::convert::image_to_mat;
-use surya::preprocess::{heatmap_to_gray_image, load_image_tensor, read_resized_image};
+use surya::postprocess::save_image;
+use surya::preprocess::{heatmap_to_gray_image, image_to_tensor, read_image, read_resized_image};
 use surya::segformer::SemanticSegmentationModel;
 
 #[derive(Debug, ValueEnum, Clone, Copy)]
@@ -75,7 +75,7 @@ impl Args {
         &self,
         device: &Device,
         num_labels: usize,
-    ) -> anyhow::Result<SemanticSegmentationModel> {
+    ) -> surya::Result<SemanticSegmentationModel> {
         let api = Api::new()?;
         let repo = api.model(self.model_repo.clone());
         info!("using model from HuggingFace repo {0}", self.model_repo);
@@ -94,7 +94,7 @@ impl Args {
 
 const NUM_LABELS: usize = 2;
 
-fn main() -> anyhow::Result<()> {
+fn main() -> surya::Result<()> {
     env_logger::init();
 
     let args = Args::parse();
@@ -104,13 +104,10 @@ fn main() -> anyhow::Result<()> {
 
     let (image, original_size) = read_resized_image(&args.image)?;
     info!("image original size (w, h)={original_size:?}");
-    let image = load_image_tensor(image, &device)?;
+    let image_tensor = image_to_tensor(&image, &device)?;
 
     // join the output dir with the input image's base name
-    let output_dir = args
-        .image
-        .file_stem()
-        .ok_or_else(|| anyhow::anyhow!("failed to get file stem of {:?}", args.image))?;
+    let output_dir = args.image.file_stem().expect("failed to get file stem");
     let output_dir = args.output_dir.join(output_dir);
     std::fs::DirBuilder::new()
         .recursive(true)
@@ -118,13 +115,12 @@ fn main() -> anyhow::Result<()> {
     info!("generating output to {:?}", output_dir);
 
     let model = args.get_model(&device, NUM_LABELS)?;
-
-    let input = image.unsqueeze(0)?;
+    let input = image_tensor.unsqueeze(0)?;
     let now = Instant::now();
     let segmentation = model.forward(&input)?;
     info!("inference took {:.3}s", now.elapsed().as_secs_f32());
-    let segmentation = segmentation.squeeze(0)?;
 
+    let segmentation = segmentation.squeeze(0)?;
     let non_max_suppression_threshold = 0.35;
     let extract_text_threshold = 0.6;
     let bbox_area_threshold = 10;
@@ -138,25 +134,26 @@ fn main() -> anyhow::Result<()> {
     )?;
 
     if args.generate_bbox_image {
-        info!("generating bbox image");
-        let image = image::io::Reader::open(args.image)?.decode()?;
-        let mut image = image_to_mat(image)?;
+        let mut image = read_image(args.image)?;
         let output_file = output_dir.join("bbox.png");
-        let output_file = output_file.to_str().expect("failed to convert to str");
         draw_bboxes(&mut image, bboxes, output_file)?;
+        info!("bbox image generated");
     }
 
     if args.generate_heatmap {
-        info!("generating heatmap");
         let heatmap = segmentation.i(0)?;
         let imgbuf = heatmap_to_gray_image(heatmap, original_size)?;
-        imgbuf.save(output_dir.join("heatmap.png"))?;
+        let output_file = output_dir.join("heatmap.png");
+        save_image(&imgbuf, output_file)?;
+        info!("heatmap generated");
     }
+
     if args.generate_affinity_map {
-        info!("generating affinity map");
         let affinity_map = segmentation.i(1)?;
         let imgbuf = heatmap_to_gray_image(affinity_map, original_size)?;
-        imgbuf.save(output_dir.join("affinity_map.png"))?;
+        let output_file = output_dir.join("affinity_map.png");
+        save_image(&imgbuf, output_file)?;
+        info!("affinity map generated");
     }
 
     Ok(())
