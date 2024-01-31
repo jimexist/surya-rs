@@ -58,31 +58,41 @@ Arguments:
 
 Options:
       --model-repo <MODEL_REPO>
-          model's hugging face repo [default: vikp/line_detector]
+          detection model's hugging face repo [default: vikp/line_detector]
       --weights-file-name <WEIGHTS_FILE_NAME>
-          model's weights file name [default: model.safetensors]
+          detection model's weights file name [default: model.safetensors]
       --config-file-name <CONFIG_FILE_NAME>
-          model's config file name [default: config.json]
-      --generate-bbox-image
+          detection model's config file name [default: config.json]
+      --non-max-suppression-threshold <NON_MAX_SUPPRESSION_THRESHOLD>
+          a value between 0.0 and 1.0 to filter low density part of heatmap [default: 0.35]
+      --extract-text-threshold <EXTRACT_TEXT_THRESHOLD>
+          a value between 0.0 and 1.0 to filter out bbox with low heatmap density [default: 0.6]
+      --bbox-area-threshold <BBOX_AREA_THRESHOLD>
+          a pixel threshold to filter out small area bbox [default: 10]
+      --polygons
+          whether to output polygons json file
+      --image
           whether to generate bbox image
-      --generate-heatmap
+      --heatmap
           whether to generate heatmap
-      --generate-affinity-map
+      --affinity-map
           whether to generate affinity map
       --output-dir <OUTPUT_DIR>
-          output directory, each file will be generating a subdirectory under this directory [default: ./surya_output]
-      --device-type <DEVICE_TYPE>
-          [default: cpu] [possible values: cpu, gpu, metal]
+          output directory, under which the input image will be generating a subdirectory [default: ./surya_output]
+      --device <DEVICE_TYPE>
+          [default: cpu] [possible values: cpu, gpu]
+      --verbose
+          whether to enable verbose mode
   -h, --help
           Print help
   -V, --version
           Print version
 ```
 
-You can use this to control logging level:
+You can also use this to control logging level:
 
 ```bash
-export RUST_LOG=info # or debug, warn, etc.
+export SURYA_LOG=warn # or debug, warn, etc.
 ```
 
 ## Library

@@ -1,9 +1,18 @@
+#[cfg(feature = "accelerate")]
+extern crate accelerate_src;
+#[cfg(feature = "mkl")]
+extern crate intel_mkl_src;
+
 use candle_core::{Device, IndexOp, Module, Tensor};
 use candle_nn::VarBuilder;
 use clap::{Parser, ValueEnum};
-use hf_hub::api::sync::Api;
+use env_logger::Env;
+use hf_hub::api::sync::ApiBuilder;
 use log::{debug, info};
 use opencv::hub_prelude::MatTraitConst;
+use std::fs::File;
+use std::io::BufWriter;
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 use surya::bbox::{draw_bboxes, generate_bbox};
@@ -34,61 +43,112 @@ impl TryInto<Device> for DeviceType {
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
-struct Args {
+struct Cli {
     #[arg(help = "path to image")]
     image: PathBuf,
+
     #[arg(
         long,
         default_value = "vikp/line_detector",
-        help = "model's hugging face repo"
+        help = "detection model's hugging face repo"
     )]
     model_repo: String,
+
     #[arg(
         long,
         default_value = "model.safetensors",
-        help = "model's weights file name"
+        help = "detection model's weights file name"
     )]
     weights_file_name: String,
-    #[arg(long, default_value = "config.json", help = "model's config file name")]
-    config_file_name: String,
-    #[arg(long, default_value_t = true, help = "whether to generate bbox image")]
-    generate_bbox_image: bool,
-    #[arg(long, default_value_t = true, help = "whether to generate heatmap")]
-    generate_heatmap: bool,
+
     #[arg(
         long,
+        default_value = "config.json",
+        help = "detection model's config file name"
+    )]
+    config_file_name: String,
+
+    #[arg(
+        long,
+        default_value_t = 0.35,
+        help = "a value between 0.0 and 1.0 to filter low density part of heatmap"
+    )]
+    non_max_suppression_threshold: f64,
+
+    #[arg(
+        long,
+        default_value_t = 0.6,
+        help = "a value between 0.0 and 1.0 to filter out bbox with low heatmap density"
+    )]
+    extract_text_threshold: f64,
+
+    #[arg(
+        long,
+        default_value_t = 10,
+        help = "a pixel threshold to filter out small area bbox"
+    )]
+    bbox_area_threshold: usize,
+
+    #[arg(
+        long = "polygons",
+        default_value_t = true,
+        help = "whether to output polygons json file"
+    )]
+    output_polygons: bool,
+
+    #[arg(
+        long = "image",
+        default_value_t = true,
+        help = "whether to generate bbox image"
+    )]
+    generate_bbox_image: bool,
+
+    #[arg(
+        long = "heatmap",
+        default_value_t = true,
+        help = "whether to generate heatmap"
+    )]
+    generate_heatmap: bool,
+
+    #[arg(
+        long = "affinity-map",
         default_value_t = true,
         help = "whether to generate affinity map"
     )]
     generate_affinity_map: bool,
+
     #[arg(
         long,
         default_value = "./surya_output",
-        help = "output directory, each file will be generating a subdirectory under this directory"
+        help = "output directory, under which the input image will be generating a subdirectory"
     )]
     output_dir: PathBuf,
-    #[arg(long, value_enum, default_value_t = DeviceType::Cpu)]
+
+    #[arg(long = "device", value_enum, default_value_t = DeviceType::Cpu)]
     device_type: DeviceType,
+
+    #[arg(long, help = "whether to enable verbose mode")]
+    verbose: bool,
 }
 
-impl Args {
+impl Cli {
     fn get_model(
         &self,
         device: &Device,
         num_labels: usize,
     ) -> surya::Result<SemanticSegmentationModel> {
-        let api = Api::new()?;
+        let api = ApiBuilder::new().with_progress(true).build()?;
         let repo = api.model(self.model_repo.clone());
-        info!("using model from HuggingFace repo {0}", self.model_repo);
+        debug!("using model from HuggingFace repo {0}", self.model_repo);
         let model_file = repo.get(&self.weights_file_name)?;
-        info!("using weights file '{0}'", self.weights_file_name);
+        debug!("using weights file '{0}'", self.weights_file_name);
         let vb = unsafe {
             VarBuilder::from_mmaped_safetensors(&[model_file], candle_core::DType::F32, device)?
         };
         let config_file = repo.get(&self.config_file_name)?;
-        info!("using config file '{0}'", self.config_file_name);
+        debug!("using config file '{0}'", self.config_file_name);
         let config = serde_json::from_str(&std::fs::read_to_string(config_file)?)?;
-        info!("loaded config: {:?}, num_labels {}", config, num_labels);
+        debug!("loaded config: {:?}, num_labels {}", config, num_labels);
         Ok(SemanticSegmentationModel::new(&config, num_labels, vb)?)
     }
 }
@@ -96,12 +156,25 @@ impl Args {
 const NUM_LABELS: usize = 2;
 
 fn main() -> surya::Result<()> {
-    env_logger::init();
+    let args = Cli::parse();
+    let env = Env::new().filter_or("SURYA_LOG", if args.verbose { "debug" } else { "info" });
+    env_logger::init_from_env(env);
 
-    let args = Args::parse();
+    assert!(
+        0.0 <= args.non_max_suppression_threshold && args.non_max_suppression_threshold <= 1.0,
+        "non-max-suppression-threshold must be between 0.0 and 1.0"
+    );
+    assert!(
+        0.0 <= args.extract_text_threshold && args.extract_text_threshold <= 1.0,
+        "extract-text-threshold must be between 0.0 and 1.0"
+    );
+    assert!(
+        args.bbox_area_threshold > 0,
+        "bbox-area-threshold must be > 0"
+    );
 
     let device = args.device_type.try_into()?;
-    info!("using device {:?}", device);
+    debug!("using device {:?}", device);
 
     let image_chunks = read_chunked_resized_image(&args.image)?;
 
@@ -125,8 +198,13 @@ fn main() -> surya::Result<()> {
     let mut heatmaps = Vec::new();
     let mut affinity_maps = Vec::new();
     for batch in image_tensors.chunks(batch_size) {
+        let batch_size = batch.len();
         let batch = Tensor::stack(batch, 0)?;
         let now = Instant::now();
+        info!(
+            "starting segformer inference with batch size {}...",
+            batch_size
+        );
         let segmentation = model.forward(&batch)?;
         info!("inference took {:.3}s", now.elapsed().as_secs_f32());
         for i in 0..batch_size {
@@ -143,16 +221,32 @@ fn main() -> surya::Result<()> {
     debug!("heatmap {:?}", heatmap);
     debug!("affinity_map {:?}", affinity_map);
 
-    let non_max_suppression_threshold = 0.35;
-    let extract_text_threshold = 0.6;
-    let bbox_area_threshold = 10;
-
     let bboxes = generate_bbox(
         &heatmap,
-        non_max_suppression_threshold,
-        extract_text_threshold,
-        bbox_area_threshold,
+        args.non_max_suppression_threshold,
+        args.extract_text_threshold,
+        args.bbox_area_threshold as i32,
     )?;
+
+    if args.output_polygons {
+        let output_file = output_dir.join("polygons.jsonl");
+        let mut buf_writer = BufWriter::new(File::create(&output_file)?);
+        for bbox in &bboxes {
+            let polygons: Vec<(f32, f32)> = bbox
+                .polygon
+                .iter()
+                .map(|p| {
+                    let precision = 1.0e3;
+                    let x = (p.x * precision).round() / precision;
+                    let y = (p.y * precision).round() / precision;
+                    (x, y)
+                })
+                .collect();
+            serde_json::to_writer(&mut buf_writer, &polygons)?;
+            writeln!(&mut buf_writer)?;
+        }
+        info!("polygons json file {:?} generated", output_file);
+    }
 
     if args.generate_bbox_image {
         let mut image = read_image(args.image)?;
@@ -161,7 +255,7 @@ fn main() -> surya::Result<()> {
             &mut image,
             heatmap.size()?,
             image_chunks.original_size_with_padding,
-            bboxes,
+            &bboxes,
             &output_file,
         )?;
         info!("bbox image {:?} generated", output_file);
