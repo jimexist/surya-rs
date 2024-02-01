@@ -159,7 +159,7 @@ pub fn draw_bboxes<P: AsRef<Path>>(
     image: &mut Mat,
     heatmap_size: Size,
     image_with_padding_size: Size,
-    bboxes: Vec<BBox>,
+    bboxes: &[BBox],
     output_file: P,
 ) -> crate::Result<()> {
     debug!(
@@ -185,7 +185,7 @@ pub fn draw_bboxes<P: AsRef<Path>>(
 pub fn generate_bbox(
     heatmap: &Mat,
     non_max_suppression_threshold: f64,
-    text_threshold: f64,
+    extract_text_threshold: f64,
     bbox_area_threshold: i32,
 ) -> crate::Result<Vec<BBox>> {
     let labels = image_threshold(heatmap, non_max_suppression_threshold)?;
@@ -212,7 +212,7 @@ pub fn generate_bbox(
             continue;
         }
         let max_value = heatmap_label_max(heatmap, &labels, label)?;
-        if max_value < text_threshold {
+        if max_value < extract_text_threshold {
             continue;
         }
         let polygon = connected_area_to_bbox(&labels, stats_row, label)?;

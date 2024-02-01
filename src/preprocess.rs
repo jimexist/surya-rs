@@ -1,3 +1,4 @@
+use crate::postprocess::ImageChunks;
 use candle_core::{Device, Tensor};
 use log::debug;
 use opencv::{
@@ -5,32 +6,11 @@ use opencv::{
     imgcodecs::{self, IMREAD_COLOR},
     imgproc,
     prelude::*,
-    types::VectorOfMat,
 };
 use std::path::Path;
 
 const INPUT_IMAGE_SIZE: i32 = 896;
 const IMAGE_CHUNK_HEIGHT: i32 = 1200;
-
-pub struct ImageChunks {
-    pub resized_chunks: Vec<Mat>,
-    pub padding: i32,
-    pub original_size: core::Size,
-    pub original_size_with_padding: core::Size,
-}
-
-impl ImageChunks {
-    pub fn stitch_image_tensors(&self, images: Vec<Tensor>) -> crate::Result<Mat> {
-        let image_chunks = images
-            .into_iter()
-            .map(heatmap_tensor_to_mat)
-            .collect::<crate::Result<Vec<_>>>()?;
-        let mut image = Mat::default();
-        let image_chunks = VectorOfMat::from_iter(image_chunks);
-        core::vconcat(&image_chunks, &mut image)?;
-        Ok(image)
-    }
-}
 
 /// load image from path and resize it to [INPUT_IMAGE_SIZE] and return the resized image and
 /// its original size
@@ -123,20 +103,6 @@ pub fn image_to_tensor(input: &Mat, device: &Device) -> crate::Result<Tensor> {
     Ok((data.to_dtype(candle_core::DType::F32)? / 255.)?
         .broadcast_sub(&mean)?
         .broadcast_div(&std)?)
-}
-
-fn heatmap_tensor_to_mat(heatmap: Tensor) -> crate::Result<Mat> {
-    let (height, width) = heatmap.dims2()?;
-    debug_assert_eq!(height, width, "original heatmap must be square");
-    let heatmap: Vec<Vec<f32>> = heatmap.to_vec2()?;
-    let mut img =
-        unsafe { Mat::new_size(core::Size::new(width as i32, height as i32), core::CV_32F)? };
-    for (x, row) in heatmap.iter().enumerate() {
-        for (y, &value) in row.iter().enumerate() {
-            *(img.at_2d_mut::<f32>(x as i32, y as i32)?) = value;
-        }
-    }
-    Ok(img)
 }
 
 fn resize(image: Mat, new_size: core::Size) -> crate::Result<Mat> {
