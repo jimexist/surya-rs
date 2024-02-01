@@ -49,6 +49,12 @@ struct Cli {
 
     #[arg(
         long,
+        help = "detection batch size, if not supplied defaults to 2 on CPU and 16 on GPU"
+    )]
+    batch_size: Option<usize>,
+
+    #[arg(
+        long,
         default_value = "vikp/line_detector",
         help = "detection model's hugging face repo"
     )]
@@ -188,7 +194,10 @@ fn main() -> surya::Result<()> {
 
     let model = args.get_model(&device, NUM_LABELS)?;
 
-    let batch_size = 2;
+    let batch_size = args.batch_size.unwrap_or_else(|| match device {
+        Device::Cpu => 2,
+        Device::Cuda(_) | Device::Metal(_) => 16,
+    });
     let image_tensors: Vec<Tensor> = image_chunks
         .resized_chunks
         .iter()
@@ -200,11 +209,11 @@ fn main() -> surya::Result<()> {
     for batch in image_tensors.chunks(batch_size) {
         let batch_size = batch.len();
         let batch = Tensor::stack(batch, 0)?;
-        let now = Instant::now();
         info!(
             "starting segformer inference with batch size {}...",
-            batch_size
+            batch_size,
         );
+        let now = Instant::now();
         let segmentation = model.forward(&batch)?;
         info!("inference took {:.3}s", now.elapsed().as_secs_f32());
         for i in 0..batch_size {
@@ -245,6 +254,7 @@ fn main() -> surya::Result<()> {
             serde_json::to_writer(&mut buf_writer, &polygons)?;
             writeln!(&mut buf_writer)?;
         }
+        buf_writer.flush()?;
         info!("polygons json file {:?} generated", output_file);
     }
 
