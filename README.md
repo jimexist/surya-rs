@@ -31,6 +31,12 @@ Setup rust toolchain if you haven't yet:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
+Install `llvm` and `opencv` (example on Mac):
+
+```bash
+brew install llvm opencv
+```
+
 Build and install the binary:
 
 ```bash
@@ -38,10 +44,8 @@ Build and install the binary:
 export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/usr/lib/"
 # run this first on other Mac
 export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/"
-# run this if you have a mac with Metal support
-cargo install --path . --features=cli,metal --bin surya
-# run this on other architectures
-cargo install --path . --features=cli --bin surya
+# optionally you can include features like accelerate, metal, mkl, etc.
+cargo install --path . --features=cli
 ```
 
 The binary when built does _not_ include the weights file itself, and will instead download via the HuggingFace Hub API. Once downloaded, the weights file will be cached in the HuggingFace cache directory.
@@ -57,6 +61,8 @@ Arguments:
   <IMAGE>  path to image
 
 Options:
+      --batch-size <BATCH_SIZE>
+          detection batch size, if not supplied defaults to 2 on CPU and 16 on GPU
       --model-repo <MODEL_REPO>
           detection model's hugging face repo [default: vikp/line_detector]
       --weights-file-name <WEIGHTS_FILE_NAME>
@@ -80,7 +86,7 @@ Options:
       --output-dir <OUTPUT_DIR>
           output directory, under which the input image will be generating a subdirectory [default: ./surya_output]
       --device <DEVICE_TYPE>
-          [default: cpu] [possible values: cpu, gpu]
+          [default: cpu] [possible values: cpu, gpu, metal]
       --verbose
           whether to enable verbose mode
   -h, --help
