@@ -130,8 +130,12 @@ struct Cli {
     )]
     output_dir: PathBuf,
 
-    #[arg(long = "device", value_enum, default_value_t = DeviceType::Cpu)]
-    device_type: DeviceType,
+    #[arg(
+        long = "device",
+        value_enum,
+        help = "device type, if not specified will try to use GPU or Metal"
+    )]
+    device_type: Option<DeviceType>,
 
     #[arg(long, help = "whether to enable verbose mode")]
     verbose: bool,
@@ -179,7 +183,13 @@ fn main() -> surya::Result<()> {
         "bbox-area-threshold must be > 0"
     );
 
-    let device = args.device_type.try_into()?;
+    let device = match args.device_type {
+        Some(device_type) => device_type.try_into()?,
+        None => Device::new_cuda(0)
+            .or_else(|_| Device::new_metal(0))
+            .unwrap_or(Device::Cpu),
+    };
+
     debug!("using device {:?}", device);
 
     let image_chunks = read_chunked_resized_image(&args.image)?;
