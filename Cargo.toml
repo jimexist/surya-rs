@@ -4,7 +4,7 @@ version = "0.3.0"
 edition = "2021"
 description = "Surya is a multilingual document OCR toolkit, original implementation in Python and PyTorch"
 license = "Apache-2.0"
-author = "Jiayu Liu <jiayu@hey.com>"
+authors = ["Jiayu Liu <jiayu@hey.com>"]
 repository = "https://github.com/jimexist/surya-rs"
 default-run = "surya"
 

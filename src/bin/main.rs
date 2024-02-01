@@ -16,7 +16,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 use surya::bbox::{draw_bboxes, generate_bbox};
-use surya::postprocess::save_grayscale_image_with_resize;
+use surya::postprocess::save_image;
 use surya::preprocess::{image_to_tensor, read_chunked_resized_image, read_image};
 use surya::segformer::SemanticSegmentationModel;
 
@@ -263,13 +263,15 @@ fn main() -> surya::Result<()> {
 
     if args.generate_heatmap {
         let output_file = output_dir.join("heatmap.png");
-        save_grayscale_image_with_resize(&heatmap, image_chunks.original_size, &output_file)?;
+        let image = image_chunks.resize_heatmap_to_image(heatmap)?;
+        save_image(&image, &output_file)?;
         info!("heatmap image {:?} generated", output_file);
     }
 
     if args.generate_affinity_map {
         let output_file = output_dir.join("affinity_map.png");
-        save_grayscale_image_with_resize(&affinity_map, image_chunks.original_size, &output_file)?;
+        let image = image_chunks.resize_heatmap_to_image(affinity_map)?;
+        save_image(&image, &output_file)?;
         info!("affinity map image {:?} generated", output_file);
     }
 
