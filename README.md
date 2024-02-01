@@ -86,7 +86,7 @@ Options:
       --output-dir <OUTPUT_DIR>
           output directory, under which the input image will be generating a subdirectory [default: ./surya_output]
       --device <DEVICE_TYPE>
-          [default: cpu] [possible values: cpu, gpu, metal]
+          device type, if not specified will try to use GPU or Metal [possible values: cpu, gpu, metal]
       --verbose
           whether to enable verbose mode
   -h, --help
