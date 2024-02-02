@@ -30,6 +30,8 @@ RUN cmake -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_EXAMPLES=OFF \
   -DBUILD_TESTS=OFF \
   -DBUILD_PERF_TESTS=OFF \
+  -DBUILD_ITT=OFF \
+  -DBUILD_IPP_IW=OFF \
   -DWITH_PNG=OFF \
   -DWITH_JPEG=OFF \
   -DWITH_TIFF=OFF \
@@ -52,8 +54,6 @@ WORKDIR /usr/src/surya
 
 COPY . .
 
-RUN ln -s /usr/lib/llvm-15/lib/libclang.so.1 "/usr/lib/$(uname -m)-linux-gnu/libclang.so"
-
 RUN OPENCV_LINK_LIBS="opencv_imgcodecs,opencv_imgproc,opencv_core" \
   OPENCV_LINK_PATHS="/opt/opencv/lib,/opt/opencv/lib/opencv4/3rdparty,/usr/lib/$(uname -m)-linux-gnu" \
   OPENCV_INCLUDE_PATHS="/opt/opencv/include,/opt/opencv/include/opencv4" \
@@ -62,6 +62,10 @@ RUN OPENCV_LINK_LIBS="opencv_imgcodecs,opencv_imgproc,opencv_core" \
   cargo install --path . --features "cli"
 
 FROM debian:bookworm-slim
+
+RUN apt-get update && \
+  apt-get install -y libssl-dev && \
+  rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/local/bin
 
