@@ -956,7 +956,7 @@ mod test {
         let device = Device::Cpu;
         let vb = VarBuilderArgs::zeros(DType::F32, &device);
         let module = SwinEncoder::new(&Default::default(), vb)?;
-        let x = Tensor::zeros(&[1, 3, 224, 224], DType::F32, &device)?;
+        let x = Tensor::zeros(&[1, 56, 56, 96], DType::F32, &device)?;
         let result = module.forward(&x)?;
         assert_eq!(result.dims(), &[1, 49, 768]);
         Ok(())
