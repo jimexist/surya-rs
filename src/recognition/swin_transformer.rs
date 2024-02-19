@@ -14,8 +14,8 @@ use candle_nn::{
 };
 
 #[derive(Debug, Clone, serde::Deserialize)]
-pub struct SwinConfig {
-    pub image_size: usize,
+pub(crate) struct SwinConfig {
+    pub image_size: (usize, usize),
     pub patch_size: usize,
     pub num_channels: usize,
     pub embed_dim: usize,
@@ -37,7 +37,7 @@ impl Default for SwinConfig {
     /// this defaults to the Swin-Tiny model with window size 7 and patch size 4 and 224x224 images
     fn default() -> Self {
         Self {
-            image_size: 224,
+            image_size: (224, 224),
             patch_size: 4,
             num_channels: 3,
             embed_dim: 96,
@@ -320,7 +320,7 @@ impl SwinSelfAttention {
 
     fn generate_relative_position_index(window_size: usize, device: &Device) -> Result<Tensor> {
         debug_assert!(window_size > 1, "window_size must be greater than 1");
-        let window_size: i64 = window_size as i64;
+        let window_size = window_size as i64;
         let h = Tensor::arange(0, window_size, device)?;
         let w = Tensor::arange(0, window_size, device)?;
         let xy_indexing = false; // use ij indexing
@@ -705,21 +705,18 @@ impl Module for SwinEncoder {
 }
 
 #[derive(Debug, Clone)]
-struct SwinModel {
+pub(crate) struct SwinModel {
     embeddings: SwinEmbeddings,
     encoder: SwinEncoder,
-    layernorm: LayerNorm,
 }
 
 impl SwinModel {
-    pub fn new(config: &SwinConfig, vb: VarBuilder) -> Result<Self> {
+    pub(crate) fn new(config: &SwinConfig, vb: VarBuilder) -> Result<Self> {
         let embeddings = SwinEmbeddings::new(config, vb.pp("embeddings"))?;
         let encoder = SwinEncoder::new(config, vb.pp("encoder"))?;
-        let layernorm = layer_norm(config.embed_dim, config.layer_norm_eps, vb.pp("layernorm"))?;
         Ok(Self {
             embeddings,
             encoder,
-            layernorm,
         })
     }
 }
@@ -728,8 +725,8 @@ impl Module for SwinModel {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
         let x = self.embeddings.forward(x)?;
         let x = self.encoder.forward(&x)?;
-        let x = self.layernorm.forward(&x)?;
-        Ok(x)
+        // this is the same as adaptive avg pool with output size 1
+        x.mean(1)
     }
 }
 
@@ -755,7 +752,10 @@ mod test {
             "embed_dim": 96,
             "hidden_act": "gelu",
             "hidden_dropout_prob": 0.0,
-            "image_size": 224,
+            "image_size": [
+              224,
+              224
+            ],
             "initializer_range": 0.02,
             "layer_norm_eps": 1e-05,
             "mlp_ratio": 4.0,
@@ -776,7 +776,7 @@ mod test {
             "window_size": 7
           }"#;
         let config: SwinConfig = serde_json::from_str(config_raw).unwrap();
-        assert_eq!(config.image_size, 224);
+        assert_eq!(config.image_size, (224, 224));
         assert_eq!(config.patch_size, 4);
         assert_eq!(config.num_channels, 3);
         assert_eq!(config.embed_dim, 96);

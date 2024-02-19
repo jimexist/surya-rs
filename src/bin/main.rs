@@ -4,10 +4,8 @@ extern crate accelerate_src;
 extern crate intel_mkl_src;
 
 use candle_core::{Device, IndexOp, Module, Tensor};
-use candle_nn::VarBuilder;
 use clap::{Parser, ValueEnum};
 use env_logger::Env;
-use hf_hub::api::sync::ApiBuilder;
 use log::{debug, info};
 use opencv::hub_prelude::MatTraitConst;
 use std::fs::File;
@@ -16,9 +14,12 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 use surya::bbox::{draw_bboxes, generate_bbox};
+use surya::detection::SemanticSegmentationModel;
+use surya::hf::HfModel;
+use surya::hf::HfModelInfo;
 use surya::postprocess::save_image;
 use surya::preprocess::{image_to_tensor, read_chunked_resized_image, read_image};
-use surya::segformer::SemanticSegmentationModel;
+use surya::recognition::RecognitionModel;
 
 #[derive(Debug, ValueEnum, Clone, Copy)]
 enum DeviceType {
@@ -65,14 +66,14 @@ struct Cli {
         default_value = "model.safetensors",
         help = "detection model's weights file name"
     )]
-    weights_file_name: String,
+    detection_weights_file_name: String,
 
     #[arg(
         long,
         default_value = "config.json",
         help = "detection model's config file name"
     )]
-    config_file_name: String,
+    detection_config_file_name: String,
 
     #[arg(
         long,
@@ -107,6 +108,20 @@ struct Cli {
         help = "recognition model's hugging face repo"
     )]
     recognition_model_repo: String,
+
+    #[arg(
+        long,
+        default_value = "model.safetensors",
+        help = "recognition model's weights file name"
+    )]
+    recognition_weights_file_name: String,
+
+    #[arg(
+        long,
+        default_value = "config.json",
+        help = "recognition model's config file name"
+    )]
+    recognition_config_file_name: String,
 
     #[arg(
         long,
@@ -155,31 +170,30 @@ struct Cli {
 }
 
 impl Cli {
-    fn get_detection_model(
-        &self,
-        device: &Device,
-        num_labels: usize,
-    ) -> surya::Result<SemanticSegmentationModel> {
-        let api = ApiBuilder::new().with_progress(true).build()?;
-        let repo = api.model(self.detection_model_repo.clone());
-        debug!(
-            "using model from HuggingFace repo {0}",
-            self.detection_model_repo
-        );
-        let model_file = repo.get(&self.weights_file_name)?;
-        debug!("using weights file '{0}'", self.weights_file_name);
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[model_file], candle_core::DType::F32, device)?
-        };
-        let config_file = repo.get(&self.config_file_name)?;
-        debug!("using config file '{0}'", self.config_file_name);
-        let config = serde_json::from_str(&std::fs::read_to_string(config_file)?)?;
-        debug!("loaded config: {:?}, num_labels {}", config, num_labels);
-        Ok(SemanticSegmentationModel::new(&config, num_labels, vb)?)
+    fn get_detection_model(&self, device: &Device) -> surya::Result<SemanticSegmentationModel> {
+        SemanticSegmentationModel::from_hf(
+            HfModelInfo {
+                model_type: "detection",
+                repo: self.detection_model_repo.clone(),
+                weights_file: self.detection_weights_file_name.clone(),
+                config_file: self.detection_config_file_name.clone(),
+            },
+            device,
+        )
+    }
+
+    fn get_recognition_model(&self, device: &Device) -> surya::Result<RecognitionModel> {
+        RecognitionModel::from_hf(
+            HfModelInfo {
+                model_type: "recognition",
+                repo: self.recognition_model_repo.clone(),
+                weights_file: self.recognition_weights_file_name.clone(),
+                config_file: self.recognition_config_file_name.clone(),
+            },
+            device,
+        )
     }
 }
-
-const NUM_LABELS: usize = 2;
 
 fn main() -> surya::Result<()> {
     let args = Cli::parse();
@@ -218,7 +232,8 @@ fn main() -> surya::Result<()> {
         .create(output_dir.clone())?;
     info!("generating output to {:?}", output_dir);
 
-    let model = args.get_detection_model(&device, NUM_LABELS)?;
+    let detection_model = args.get_detection_model(&device)?;
+    // let recognition_model = args.get_recognition_model(&device)?;
 
     let batch_size = args.detection_batch_size.unwrap_or(match device {
         Device::Cpu => 2,
@@ -240,7 +255,7 @@ fn main() -> surya::Result<()> {
             batch_size,
         );
         let now = Instant::now();
-        let segmentation = model.forward(&batch)?;
+        let segmentation = detection_model.forward(&batch)?;
         info!("inference took {:.3}s", now.elapsed().as_secs_f32());
         for i in 0..batch_size {
             let heatmap: Tensor = segmentation.i(i)?.squeeze(0)?.i(0)?;
