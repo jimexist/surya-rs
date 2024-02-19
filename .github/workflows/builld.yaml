@@ -45,13 +45,32 @@ jobs:
           export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/"
           cargo check --features=cli,metal --bins
 
+  build-m1:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup OpenCV and LLVM
+        run: brew install opencv llvm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run check on macOS
+        run: |
+          echo "setting DYLD_FALLBACK_LIBRARY_PATH to $(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/"
+          export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/"
+          cargo check --features=cli,metal --bins
+
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup OpenCV for Ubuntu
-        run: sudo apt install -y libopencv-dev clang libclang-dev
+        run: |
+          sudo apt update -y
+          sudo apt install -y libopencv-dev clang libclang-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
