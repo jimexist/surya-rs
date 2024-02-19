@@ -204,7 +204,7 @@ fn main() -> surya::Result<()> {
 
     let model = args.get_model(&device, NUM_LABELS)?;
 
-    let batch_size = args.batch_size.unwrap_or_else(|| match device {
+    let batch_size = args.batch_size.unwrap_or(match device {
         Device::Cpu => 2,
         Device::Cuda(_) | Device::Metal(_) => 16,
     });

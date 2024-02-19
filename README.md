@@ -4,7 +4,8 @@
 [![Crates.io Version](https://img.shields.io/crates/v/surya)](https://crates.io/crates/surya)
 
 Rust implementation of [surya][surya], a multilingual document OCR toolkit.
-The implementation is based on a modified version of Segformer and [OpenCV][opencv].
+The implementation is based on a modified version of Segformer, [OpenCV][opencv], and
+donut transformer.
 
 Please refer to the original project for more details on licensing of the weights.
 
@@ -12,13 +13,15 @@ Please refer to the original project for more details on licensing of the weight
 
 This project is still in development, feel free to star and check back.
 
-- [x] model structure, segformer (for inference only)
-- [x] weights loading
 - [x] image input pre-processing
-- [x] heatmap and affinity map
-- [x] bboxes
-- [x] image splitting and stitching
-- [ ] text recognition
+- [x] detection - segformer
+- [x] detection - weights loading
+- [x] detection - heatmap and affinity map
+- [x] detection - bboxes
+- [x] detection - image splitting and stitching
+- [ ] recognition - swin encoder
+- [ ] recognition - MoE MBart
+- [ ] recognition - donut transformer loading
 - [ ] benchmark
 - [ ] quantifications
 
