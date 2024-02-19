@@ -64,10 +64,10 @@ Arguments:
   <IMAGE>  path to image
 
 Options:
-      --batch-size <BATCH_SIZE>
+      --detection-batch-size <DETECTION_BATCH_SIZE>
           detection batch size, if not supplied defaults to 2 on CPU and 16 on GPU
-      --model-repo <MODEL_REPO>
-          detection model's hugging face repo [default: vikp/line_detector]
+      --detection-model-repo <DETECTION_MODEL_REPO>
+          detection model's hugging face repo [default: vikp/surya_det]
       --weights-file-name <WEIGHTS_FILE_NAME>
           detection model's weights file name [default: model.safetensors]
       --config-file-name <CONFIG_FILE_NAME>
@@ -78,6 +78,12 @@ Options:
           a value between 0.0 and 1.0 to filter out bbox with low heatmap density [default: 0.6]
       --bbox-area-threshold <BBOX_AREA_THRESHOLD>
           a pixel threshold to filter out small area bbox [default: 10]
+      --recognition-batch-size <RECOGNITION_BATCH_SIZE>
+          recognition batch size, if not supplied defaults to 8 on CPU and 256 on GPU
+      --recognition-model-repo <RECOGNITION_MODEL_REPO>
+          recognition model's hugging face repo [default: vikp/surya_rec]
+      --output-dir <OUTPUT_DIR>
+          output directory, under which the input image will be generating a subdirectory [default: ./surya_output]
       --polygons
           whether to output polygons json file
       --image
@@ -86,8 +92,6 @@ Options:
           whether to generate heatmap
       --affinity-map
           whether to generate affinity map
-      --output-dir <OUTPUT_DIR>
-          output directory, under which the input image will be generating a subdirectory [default: ./surya_output]
       --device <DEVICE_TYPE>
           device type, if not specified will try to use GPU or Metal [possible values: cpu, gpu, metal]
       --verbose

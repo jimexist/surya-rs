@@ -51,14 +51,14 @@ struct Cli {
         long,
         help = "detection batch size, if not supplied defaults to 2 on CPU and 16 on GPU"
     )]
-    batch_size: Option<usize>,
+    detection_batch_size: Option<usize>,
 
     #[arg(
         long,
-        default_value = "vikp/line_detector",
+        default_value = "vikp/surya_det",
         help = "detection model's hugging face repo"
     )]
-    model_repo: String,
+    detection_model_repo: String,
 
     #[arg(
         long,
@@ -96,6 +96,26 @@ struct Cli {
     bbox_area_threshold: usize,
 
     #[arg(
+        long,
+        help = "recognition batch size, if not supplied defaults to 8 on CPU and 256 on GPU"
+    )]
+    recognition_batch_size: Option<usize>,
+
+    #[arg(
+        long,
+        default_value = "vikp/surya_rec",
+        help = "recognition model's hugging face repo"
+    )]
+    recognition_model_repo: String,
+
+    #[arg(
+        long,
+        default_value = "./surya_output",
+        help = "output directory, under which the input image will be generating a subdirectory"
+    )]
+    output_dir: PathBuf,
+
+    #[arg(
         long = "polygons",
         default_value_t = true,
         help = "whether to output polygons json file"
@@ -124,13 +144,6 @@ struct Cli {
     generate_affinity_map: bool,
 
     #[arg(
-        long,
-        default_value = "./surya_output",
-        help = "output directory, under which the input image will be generating a subdirectory"
-    )]
-    output_dir: PathBuf,
-
-    #[arg(
         long = "device",
         value_enum,
         help = "device type, if not specified will try to use GPU or Metal"
@@ -142,14 +155,17 @@ struct Cli {
 }
 
 impl Cli {
-    fn get_model(
+    fn get_detection_model(
         &self,
         device: &Device,
         num_labels: usize,
     ) -> surya::Result<SemanticSegmentationModel> {
         let api = ApiBuilder::new().with_progress(true).build()?;
-        let repo = api.model(self.model_repo.clone());
-        debug!("using model from HuggingFace repo {0}", self.model_repo);
+        let repo = api.model(self.detection_model_repo.clone());
+        debug!(
+            "using model from HuggingFace repo {0}",
+            self.detection_model_repo
+        );
         let model_file = repo.get(&self.weights_file_name)?;
         debug!("using weights file '{0}'", self.weights_file_name);
         let vb = unsafe {
@@ -202,9 +218,9 @@ fn main() -> surya::Result<()> {
         .create(output_dir.clone())?;
     info!("generating output to {:?}", output_dir);
 
-    let model = args.get_model(&device, NUM_LABELS)?;
+    let model = args.get_detection_model(&device, NUM_LABELS)?;
 
-    let batch_size = args.batch_size.unwrap_or(match device {
+    let batch_size = args.detection_batch_size.unwrap_or(match device {
         Device::Cpu => 2,
         Device::Cuda(_) | Device::Metal(_) => 16,
     });
