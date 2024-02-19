@@ -660,7 +660,7 @@ impl SegformerDecodeHead {
         })
     }
 
-    fn forward(&self, encoder_hidden_states: &Vec<Tensor>) -> Result<Tensor> {
+    fn forward(&self, encoder_hidden_states: &[Tensor]) -> Result<Tensor> {
         if encoder_hidden_states.len() != self.linear_c.len() {
             candle_core::bail!(
                 "The number of encoder hidden states {} is not equal to the number of linear layers {}",
