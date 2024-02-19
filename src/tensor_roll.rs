@@ -1,3 +1,4 @@
+//! Temporary patch until the `candle_core` crate is updated with the `roll` method
 use candle_core::{shape::Dim, Result, Tensor};
 
 pub trait Roll {
@@ -13,6 +14,7 @@ impl Roll for Tensor {
     ///
     /// ```rust
     /// # use candle_core::{Tensor, Device};
+    /// # use surya::tensor_roll::Roll;
     /// let tensor = Tensor::new(&[[0f32, 1.], [2., 3.], [4., 5.]], &Device::Cpu)?;
     /// let tensor = tensor.roll(1, 0)?;
     /// assert_eq!(tensor.to_vec2::<f32>()?, &[[4., 5.], [0., 1.], [2., 3.]]);

@@ -712,7 +712,7 @@ struct SwinModel {
 }
 
 impl SwinModel {
-    fn new(config: &SwinConfig, vb: VarBuilder) -> Result<Self> {
+    pub fn new(config: &SwinConfig, vb: VarBuilder) -> Result<Self> {
         let embeddings = SwinEmbeddings::new(config, vb.pp("embeddings"))?;
         let encoder = SwinEncoder::new(config, vb.pp("encoder"))?;
         let layernorm = layer_norm(config.embed_dim, config.layer_norm_eps, vb.pp("layernorm"))?;
@@ -729,29 +729,6 @@ impl Module for SwinModel {
         let x = self.embeddings.forward(x)?;
         let x = self.encoder.forward(&x)?;
         let x = self.layernorm.forward(&x)?;
-        Ok(x)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct SwinForImageClassification {
-    swin: SwinModel,
-    classifier: Linear,
-}
-
-impl SwinForImageClassification {
-    pub fn new(config: &SwinConfig, num_labels: usize, vb: VarBuilder) -> Result<Self> {
-        let swin = SwinModel::new(config, vb.pp("swin"))?;
-        let hidden_dim: usize = config.embed_dim * 2_usize.pow(config.depths.len() as u32 - 1);
-        let classifier = linear(hidden_dim, num_labels, vb.pp("classifier"))?;
-        Ok(Self { swin, classifier })
-    }
-}
-
-impl Module for SwinForImageClassification {
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let x = self.swin.forward(x)?;
-        let x = self.classifier.forward(&x)?;
         Ok(x)
     }
 }
