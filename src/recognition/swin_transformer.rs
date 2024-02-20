@@ -942,13 +942,15 @@ mod test {
         )?;
         {
             let y = embedding.patch_embeddings.forward(&x)?;
-            let y_sum: f32 = y.to_dtype(DType::F32)?.mean_all()?.to_scalar()?;
-            assert!(approx_eq!(f32, y_sum, -0.0801, epsilon = 1e-4));
+            let y_sum: f32 = y.to_dtype(DType::F32)?.sum_all()?.to_scalar()?;
+            // assert_eq!(y_sum, -112499.0938);
+            assert!(approx_eq!(f32, y_sum, -112499.0938, epsilon = 20.));
         }
         {
             let y = embedding.forward(&x)?;
-            let y_sum: f32 = y.to_dtype(DType::F32)?.mean_all()?.to_scalar()?;
-            assert!(approx_eq!(f32, y_sum, 0.0997, epsilon = 1e-4));
+            let y_sum: f32 = y.to_dtype(DType::F32)?.sum_all()?.to_scalar()?;
+            // assert_eq!(y_sum, 140062.19);
+            assert!(approx_eq!(f32, y_sum, 140062.19, epsilon = 45.));
         }
         Ok(())
     }
