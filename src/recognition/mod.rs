@@ -16,7 +16,6 @@ use swin_transformer::SwinModel;
 pub struct Config {
     encoder: SwinConfig,
     decoder: MBartConfig,
-    pad_token_id: i32,
 }
 
 #[derive(Debug, Clone)]

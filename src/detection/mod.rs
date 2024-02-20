@@ -1,3 +1,5 @@
+//! Detection module, consisting of segformer implementation
+
 mod segformer;
 
 use crate::error::Result;
