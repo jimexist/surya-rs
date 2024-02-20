@@ -43,3 +43,6 @@ cli = ["clap", "anyhow"]
 name = "surya"
 path = "src/bin/main.rs"
 required-features = ["cli"]
+
+[dev-dependencies]
+float-cmp = "0.9.0"
