@@ -24,18 +24,14 @@ pub(crate) struct SwinConfig {
     pub window_size: usize,
     pub mlp_ratio: f64,
     pub qkv_bias: bool,
-    // pub hidden_dropout_prob: f64,
-    // pub attention_probs_dropout_prob: f64,
-    // pub drop_path_rate: f64,
     pub hidden_act: Activation,
     pub use_absolute_embeddings: bool,
     pub initializer_range: f64,
     pub layer_norm_eps: f64,
 }
 
-impl Default for SwinConfig {
-    /// this defaults to the Swin-Tiny model with window size 7 and patch size 4 and 224x224 images
-    fn default() -> Self {
+impl SwinConfig {
+    fn tiny_patch4_window7_224() -> Self {
         Self {
             image_size: (224, 224),
             patch_size: 4,
@@ -46,11 +42,29 @@ impl Default for SwinConfig {
             window_size: 7,
             mlp_ratio: 4.0,
             qkv_bias: true,
-            // hidden_dropout_prob: 0.0,
-            // attention_probs_dropout_prob: 0.0,
-            // drop_path_rate: 0.1,
             hidden_act: Activation::Gelu,
             use_absolute_embeddings: false,
+            initializer_range: 0.02,
+            layer_norm_eps: 1e-05,
+        }
+    }
+}
+
+impl Default for SwinConfig {
+    /// this defaults to the surya swin encoder config
+    fn default() -> Self {
+        Self {
+            image_size: (196, 896),
+            patch_size: 4,
+            num_channels: 3,
+            embed_dim: 128,
+            depths: vec![2, 2, 14, 2],
+            num_heads: vec![4, 8, 16, 32],
+            window_size: 7,
+            mlp_ratio: 4.0,
+            qkv_bias: true,
+            hidden_act: Activation::Gelu,
+            use_absolute_embeddings: true,
             initializer_range: 0.02,
             layer_norm_eps: 1e-05,
         }
@@ -732,73 +746,135 @@ impl Module for SwinModel {
 
 #[cfg(test)]
 mod test {
+
     use super::*;
     use candle_nn::var_builder::VarBuilderArgs;
 
     #[test]
     fn test_swin_config_from_json() {
         let config_raw = r#"{
+            "_name_or_path": "",
+            "add_cross_attention": false,
             "architectures": [
-              "SwinForImageClassification"
+              "DonutSwinModel"
             ],
             "attention_probs_dropout_prob": 0.0,
+            "bad_words_ids": null,
+            "begin_suppress_tokens": null,
+            "bos_token_id": null,
+            "chunk_size_feed_forward": 0,
+            "cross_attention_hidden_size": null,
+            "decoder_start_token_id": null,
             "depths": [
               2,
               2,
-              6,
+              14,
               2
             ],
+            "diversity_penalty": 0.0,
+            "do_sample": false,
             "drop_path_rate": 0.1,
-            "embed_dim": 96,
+            "early_stopping": false,
+            "embed_dim": 128,
+            "encoder_no_repeat_ngram_size": 0,
+            "eos_token_id": null,
+            "exponential_decay_length_penalty": null,
+            "finetuning_task": null,
+            "forced_bos_token_id": null,
+            "forced_eos_token_id": null,
             "hidden_act": "gelu",
             "hidden_dropout_prob": 0.0,
+            "hidden_size": 1024,
+            "id2label": {
+              "0": "LABEL_0",
+              "1": "LABEL_1"
+            },
             "image_size": [
-              224,
-              224
+              196,
+              896
             ],
             "initializer_range": 0.02,
-            "layer_norm_eps": 1e-05,
+            "is_decoder": false,
+            "is_encoder_decoder": false,
+            "label2id": {
+              "LABEL_0": 0,
+              "LABEL_1": 1
+            },
+            "layer_norm_eps": 0.00001,
+            "length_penalty": 1.0,
+            "max_length": 20,
+            "min_length": 0,
             "mlp_ratio": 4.0,
-            "model_type": "swin",
+            "model_type": "donut-swin",
+            "no_repeat_ngram_size": 0,
+            "num_beam_groups": 1,
+            "num_beams": 1,
             "num_channels": 3,
             "num_heads": [
-              3,
-              6,
-              12,
-              24
+              4,
+              8,
+              16,
+              32
             ],
+            "num_layers": 4,
+            "num_return_sequences": 1,
+            "output_attentions": false,
+            "output_hidden_states": false,
+            "output_scores": false,
+            "pad_token_id": null,
             "patch_size": 4,
             "path_norm": true,
+            "prefix": null,
+            "problem_type": null,
+            "pruned_heads": {},
             "qkv_bias": true,
+            "remove_invalid_values": false,
+            "repetition_penalty": 1.0,
+            "return_dict": true,
+            "return_dict_in_generate": false,
+            "sep_token_id": null,
+            "suppress_tokens": null,
+            "task_specific_params": null,
+            "temperature": 1.0,
+            "tf_legacy_loss": false,
+            "tie_encoder_decoder": false,
+            "tie_word_embeddings": true,
+            "tokenizer_class": null,
+            "top_k": 50,
+            "top_p": 1.0,
             "torch_dtype": "float32",
-            "transformers_version": "4.16.0.dev0",
-            "use_absolute_embeddings": false,
+            "torchscript": false,
+            "typical_p": 1.0,
+            "use_2d_embeddings": false,
+            "use_absolute_embeddings": true,
+            "use_bfloat16": false,
             "window_size": 7
           }"#;
         let config: SwinConfig = serde_json::from_str(config_raw).unwrap();
-        assert_eq!(config.image_size, (224, 224));
-        assert_eq!(config.patch_size, 4);
-        assert_eq!(config.num_channels, 3);
-        assert_eq!(config.embed_dim, 96);
-        assert_eq!(config.depths, vec![2, 2, 6, 2]);
-        assert_eq!(config.num_heads, vec![3, 6, 12, 24]);
-        assert_eq!(config.window_size, 7);
-        assert_eq!(config.mlp_ratio, 4.0);
-        assert_eq!(config.qkv_bias, true);
-        // assert_eq!(config.hidden_dropout_prob, 0.0);
-        // assert_eq!(config.attention_probs_dropout_prob, 0.0);
-        // assert_eq!(config.drop_path_rate, 0.1);
-        assert_eq!(config.hidden_act, Activation::Gelu);
-        assert_eq!(config.use_absolute_embeddings, false);
-        assert_eq!(config.initializer_range, 0.02);
-        assert_eq!(config.layer_norm_eps, 1e-05);
+        let default_config = SwinConfig::default();
+        assert_eq!(config.image_size, default_config.image_size);
+        assert_eq!(config.patch_size, default_config.patch_size);
+        assert_eq!(config.num_channels, default_config.num_channels);
+        assert_eq!(config.embed_dim, default_config.embed_dim);
+        assert_eq!(config.depths, default_config.depths);
+        assert_eq!(config.num_heads, default_config.num_heads);
+        assert_eq!(config.window_size, default_config.window_size);
+        assert_eq!(config.mlp_ratio, default_config.mlp_ratio);
+        assert_eq!(config.qkv_bias, default_config.qkv_bias);
+        assert_eq!(config.hidden_act, default_config.hidden_act);
+        assert_eq!(
+            config.use_absolute_embeddings,
+            default_config.use_absolute_embeddings
+        );
+        assert_eq!(config.initializer_range, default_config.initializer_range);
+        assert_eq!(config.layer_norm_eps, default_config.layer_norm_eps);
     }
 
     #[test]
     fn test_swin_patch_embeddings() -> Result<()> {
         let device = Device::Cpu;
         let vb = VarBuilderArgs::zeros(DType::F32, &device);
-        let config = Default::default();
+        let config = SwinConfig::tiny_patch4_window7_224();
         let module = SwinPatchEmbeddings::new(&config, vb)?;
         let x = Tensor::zeros(&[1, 3, 224, 224], DType::F32, &device)?;
         let result = module.forward(&x)?;
@@ -810,7 +886,7 @@ mod test {
     fn test_swin_embeddings() -> Result<()> {
         let device = Device::Cpu;
         let vb = VarBuilderArgs::zeros(DType::F32, &device);
-        let config = Default::default();
+        let config = SwinConfig::tiny_patch4_window7_224();
         let module = SwinEmbeddings::new(&config, vb)?;
         let x = Tensor::zeros(&[1, 3, 224, 224], DType::F32, &device)?;
         let result = module.forward(&x)?;
@@ -887,7 +963,7 @@ mod test {
     #[test]
     fn test_swin_layer() -> Result<()> {
         let device = Device::Cpu;
-        let config = Default::default();
+        let config = SwinConfig::tiny_patch4_window7_224();
         let dim = 96;
         let vb = VarBuilderArgs::zeros(DType::F32, &device);
         let x = Tensor::zeros(&[1, 56, 56, 96], DType::F32, &device)?;
@@ -944,7 +1020,8 @@ mod test {
         let device = Device::Cpu;
         let dim = 96;
         let vb = VarBuilderArgs::zeros(DType::F32, &device);
-        let module = SwinPatchMerging::new(&Default::default(), dim, vb)?;
+        let config = SwinConfig::tiny_patch4_window7_224();
+        let module = SwinPatchMerging::new(&config, dim, vb)?;
         let x = Tensor::zeros(&[1, 7, 7, 96], DType::F32, &device)?;
         let result = module.forward(&x)?;
         assert_eq!(result.dims(), &[1, 4 * 4, 96 * 2]);
@@ -956,7 +1033,8 @@ mod test {
     fn test_swin_encoder() -> Result<()> {
         let device = Device::Cpu;
         let vb = VarBuilderArgs::zeros(DType::F32, &device);
-        let module = SwinEncoder::new(&Default::default(), vb)?;
+        let config = SwinConfig::tiny_patch4_window7_224();
+        let module = SwinEncoder::new(&config, vb)?;
         let x = Tensor::zeros(&[1, 56, 56, 96], DType::F32, &device)?;
         let result = module.forward(&x)?;
         assert_eq!(result.dims(), &[1, 49, 768]);

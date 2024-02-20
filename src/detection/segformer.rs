@@ -1,3 +1,4 @@
+//! Segformer implementation
 use candle_core::{Module, ModuleT, Result, Tensor, D};
 use candle_nn::{
     conv2d, conv2d_no_bias, layer_norm, linear, Activation, Conv2d, Conv2dConfig, Linear,
