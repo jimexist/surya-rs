@@ -76,16 +76,17 @@ struct SwinPatchEmbeddings {
     projection: Conv2d,
     patch_size: usize,
     num_channels: usize,
+    num_patches: usize,
 }
 
 impl SwinPatchEmbeddings {
     fn new(config: &SwinConfig, vb: VarBuilder) -> Result<Self> {
         let num_channels = config.num_channels as usize;
         let patch_size = config.patch_size as usize;
-        // let num_patches = (config.image_size / patch_size).pow(2);
+        let hidden_size = config.embed_dim as usize;
         let projection = conv2d(
             num_channels,
-            config.embed_dim as usize,
+            hidden_size,
             patch_size,
             Conv2dConfig {
                 stride: patch_size,
@@ -93,14 +94,21 @@ impl SwinPatchEmbeddings {
             },
             vb.pp("projection"),
         )?;
+        let num_patches = config.image_size.0 * config.image_size.1 / patch_size / patch_size;
         Ok(Self {
             projection,
             patch_size,
+            num_patches,
             num_channels,
         })
     }
 
     fn maybe_pad(&self, tensor: &Tensor, height: usize, width: usize) -> Result<Tensor> {
+        debug_assert_eq!(
+            4,
+            tensor.dims().len(),
+            "Input tensor must have 4 dimensions"
+        );
         let tensor = if width % self.patch_size != 0 {
             let pad = self.patch_size - (width % self.patch_size);
             tensor.pad_with_zeros(3, 0, pad)?
@@ -132,6 +140,7 @@ impl Module for SwinPatchEmbeddings {
 #[derive(Debug, Clone)]
 struct SwinEmbeddings {
     patch_embeddings: SwinPatchEmbeddings,
+    position_embeddings: Option<Tensor>,
     norm: LayerNorm,
 }
 
@@ -139,8 +148,18 @@ impl SwinEmbeddings {
     fn new(config: &SwinConfig, vb: VarBuilder) -> Result<Self> {
         let patch_embeddings = SwinPatchEmbeddings::new(config, vb.pp("patch_embeddings"))?;
         let norm = layer_norm(config.embed_dim, config.layer_norm_eps, vb.pp("norm"))?;
+        let position_embeddings = if config.use_absolute_embeddings {
+            let position_embedding = vb.get(
+                (1, patch_embeddings.num_patches + 1, config.embed_dim),
+                "position_embeddings",
+            )?;
+            Some(position_embedding)
+        } else {
+            None
+        };
         Ok(Self {
             patch_embeddings,
+            position_embeddings,
             norm,
         })
     }
@@ -155,7 +174,15 @@ impl Module for SwinEmbeddings {
             let x = self.norm.forward(&x)?;
             x.permute((0, 2, 1))?.reshape(&[b, c, h, w])?
         };
-        // TODO mask token
+        let x = if let Some(position_embedding) = &self.position_embeddings {
+            let seq_len = h * w;
+            let position_embedding = position_embedding.i((.., ..seq_len))?;
+            let x = x.flatten_from(2)?.permute((0, 2, 1))?;
+            let x = x.broadcast_add(&position_embedding)?;
+            x.permute((0, 2, 1))?.reshape(&[b, c, h, w])?
+        } else {
+            x.clone()
+        };
         Ok(x)
     }
 }
@@ -879,6 +906,52 @@ mod test {
         let x = Tensor::zeros(&[1, 3, 224, 224], DType::F32, &device)?;
         let result = module.forward(&x)?;
         assert_eq!(result.dims(), &[1, config.embed_dim, 56, 56]);
+        Ok(())
+    }
+
+    // this is expensive, run using `cargo t -- --ignored`
+    #[test]
+    #[ignore]
+    fn test_embeddings_value_compare() -> anyhow::Result<()> {
+        use crate::hf::HfModelInfo;
+        use crate::recognition::Config;
+        use float_cmp::approx_eq;
+
+        let device = Device::Cpu;
+        let dtype = DType::F16;
+        let model_info = HfModelInfo {
+            model_type: "test",
+            repo: "vikp/surya_rec".into(),
+            weights_file: "model.safetensors".into(),
+            config_file: "config.json".into(),
+        };
+        let (config_file, model_file) = model_info.download_model_files()?;
+        let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[model_file], dtype, &device)? };
+        let config =
+            serde_json::from_str::<Config>(&std::fs::read_to_string(config_file)?)?.encoder;
+        let embedding = SwinEmbeddings::new(&config, vb.pp("encoder").pp("embeddings"))?;
+        let x = Tensor::ones(
+            &[
+                1,
+                config.num_channels,
+                config.image_size.0,
+                config.image_size.1,
+            ],
+            dtype,
+            &device,
+        )?;
+        {
+            let y = embedding.patch_embeddings.forward(&x)?;
+            let y_sum: f32 = y.to_dtype(DType::F32)?.sum_all()?.to_scalar()?;
+            // assert_eq!(y_sum, -112499.0938);
+            assert!(approx_eq!(f32, y_sum, -112499.0938, epsilon = 20.));
+        }
+        {
+            let y = embedding.forward(&x)?;
+            let y_sum: f32 = y.to_dtype(DType::F32)?.sum_all()?.to_scalar()?;
+            // assert_eq!(y_sum, 140062.19);
+            assert!(approx_eq!(f32, y_sum, 140062.19, epsilon = 45.));
+        }
         Ok(())
     }
 
