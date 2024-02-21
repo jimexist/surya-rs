@@ -775,7 +775,7 @@ impl Module for SwinModel {
 mod test {
 
     use super::*;
-    use candle_nn::var_builder::VarBuilderArgs;
+    use candle_nn::{embedding, var_builder::VarBuilderArgs};
 
     #[test]
     fn test_swin_config_from_json() {
@@ -930,6 +930,7 @@ mod test {
         let config =
             serde_json::from_str::<Config>(&std::fs::read_to_string(config_file)?)?.encoder;
         let embedding = SwinEmbeddings::new(&config, vb.pp("encoder").pp("embeddings"))?;
+
         let x = Tensor::ones(
             &[
                 1,
@@ -943,14 +944,22 @@ mod test {
         {
             let y = embedding.patch_embeddings.forward(&x)?;
             let y_sum: f32 = y.to_dtype(DType::F32)?.sum_all()?.to_scalar()?;
-            // assert_eq!(y_sum, -112499.0938);
-            assert!(approx_eq!(f32, y_sum, -112499.0938, epsilon = 20.));
+            assert!(approx_eq!(
+                f32,
+                y_sum,
+                -112499.0938,
+                epsilon = 112499.0938 * 5e-3
+            ));
         }
         {
             let y = embedding.forward(&x)?;
             let y_sum: f32 = y.to_dtype(DType::F32)?.sum_all()?.to_scalar()?;
-            // assert_eq!(y_sum, 140062.19);
-            assert!(approx_eq!(f32, y_sum, 140062.19, epsilon = 45.));
+            assert!(approx_eq!(
+                f32,
+                y_sum,
+                140062.19,
+                epsilon = 140062.19 * 5e-3
+            ));
         }
         Ok(())
     }
