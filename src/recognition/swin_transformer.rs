@@ -6,7 +6,6 @@
 //!
 //! https://huggingface.co/docs/transformers/model_doc/swin
 
-use crate::tensor_roll::Roll;
 use candle_core::{DType, Device, IndexOp, Module, Result, Shape, Tensor, D};
 use candle_nn::{
     conv2d, layer_norm, linear, linear_no_bias, Activation, Conv2d, Conv2dConfig, LayerNorm,
