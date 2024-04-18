@@ -43,7 +43,8 @@ impl ImageChunks {
         let result = Mat::roi(
             &resized_image,
             core::Rect::new(0, 0, self.original_size.width, self.original_size.height),
-        )?;
+        )?
+        .clone_pointee();
         Ok(result)
     }
 }

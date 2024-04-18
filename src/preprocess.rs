@@ -59,7 +59,7 @@ pub fn read_chunked_resized_image<P: AsRef<Path>>(image_path: P) -> crate::Resul
         .map(|i| {
             let start = (i as i32) * IMAGE_CHUNK_HEIGHT;
             let roi: core::Rect_<i32> = core::Rect::new(0, start, image.cols(), IMAGE_CHUNK_HEIGHT);
-            let chunk = Mat::roi(&image, roi)?;
+            let chunk = Mat::roi(&image, roi)?.clone_pointee();
             let size = core::Size::new(INPUT_IMAGE_SIZE, INPUT_IMAGE_SIZE);
             resize(chunk, size)
         })

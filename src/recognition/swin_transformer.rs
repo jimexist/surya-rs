@@ -80,9 +80,9 @@ struct SwinPatchEmbeddings {
 
 impl SwinPatchEmbeddings {
     fn new(config: &SwinConfig, vb: VarBuilder) -> Result<Self> {
-        let num_channels = config.num_channels as usize;
-        let patch_size = config.patch_size as usize;
-        let hidden_size = config.embed_dim as usize;
+        let num_channels = config.num_channels;
+        let patch_size = config.patch_size;
+        let hidden_size = config.embed_dim;
         let projection = conv2d(
             num_channels,
             hidden_size,
@@ -209,7 +209,7 @@ impl SwinIntermediate {
 
 impl Module for SwinIntermediate {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let x = self.dense.forward(&x)?;
+        let x = self.dense.forward(x)?;
         let x = self.intermediate_act_fn.forward(&x)?;
         Ok(x)
     }
@@ -229,7 +229,7 @@ impl SwinSelfOutput {
 
 impl Module for SwinSelfOutput {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let x = self.dense.forward(&x)?;
+        let x = self.dense.forward(x)?;
         Ok(x)
     }
 }
@@ -248,7 +248,7 @@ impl SwinOutput {
 
 impl Module for SwinOutput {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let x = self.dense.forward(&x)?;
+        let x = self.dense.forward(x)?;
         Ok(x)
     }
 }
@@ -373,11 +373,11 @@ impl SwinSelfAttention {
             (left - right)?
         };
         let relative_grid = {
-            let bias = Tensor::full(window_size - 1, &grid.shape().clone(), device)?;
+            let bias = Tensor::full(window_size - 1, grid.shape().clone(), device)?;
             let relative_grid = (grid + bias)?;
             let m1 = relative_grid.i(0)?;
             let m2 = relative_grid.i(1)?;
-            let scalar = Tensor::full(2 * window_size - 1, &m1.shape().clone(), device)?;
+            let scalar = Tensor::full(2 * window_size - 1, m1.shape().clone(), device)?;
             let m1 = (m1 * scalar)?;
             Tensor::stack(&[m1, m2], 2)?
         };
@@ -395,9 +395,9 @@ impl SwinSelfAttention {
 impl Module for SwinSelfAttention {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
         debug_assert_eq!(3, x.dims().len(), "Input tensor must have 3 dimensions");
-        let key_layer = self.transpose_for_scores(&self.key.forward(&x)?)?;
-        let query_layer = self.transpose_for_scores(&self.query.forward(&x)?)?;
-        let value_layer = self.transpose_for_scores(&self.value.forward(&x)?)?;
+        let key_layer = self.transpose_for_scores(&self.key.forward(x)?)?;
+        let query_layer = self.transpose_for_scores(&self.query.forward(x)?)?;
+        let value_layer = self.transpose_for_scores(&self.value.forward(x)?)?;
         let attention_scores = (query_layer.matmul(&key_layer.t()?))?;
         let attention_scores = (attention_scores / (self.attention_head_size as f64).sqrt())?;
         let attention_scores = attention_scores.broadcast_add(&self.relative_position_bias)?;
@@ -722,7 +722,7 @@ impl SwinEncoder {
                 let downsample = i < config.depths.len() - 1;
                 SwinStage::new(
                     config,
-                    dim as usize,
+                    dim,
                     depth,
                     num_heads,
                     downsample,
@@ -943,7 +943,7 @@ mod test {
             let y = embedding.patch_embeddings.forward(&x)?;
             let y_sum: f32 = y.to_dtype(DType::F32)?.sum_all()?.to_scalar()?;
             // assert_eq!(y_sum, -112499.0938);
-            assert!(approx_eq!(f32, y_sum, -112499.0938, epsilon = 20.));
+            assert!(approx_eq!(f32, y_sum, -112_499.09, epsilon = 20.));
         }
         {
             let y = embedding.forward(&x)?;
