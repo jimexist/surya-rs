@@ -1,6 +1,6 @@
-FROM rust:1.75-slim as builder
+FROM rust:1.80-slim as builder
 
-ENV OPEN_CV_VERSION="4.9.0"
+ENV OPEN_CV_VERSION="4.10.0"
 
 RUN apt-get update && apt-get install -y \
   build-essential \
