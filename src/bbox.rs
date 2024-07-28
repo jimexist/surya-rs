@@ -3,7 +3,6 @@ use opencv::core::{
     self, max_mat_f64, min_mat_f64, Mat, Point, Point2f, Rect, Scalar, Size, Vector, CV_32S,
 };
 use opencv::prelude::*;
-use opencv::types::VectorOfi32;
 use opencv::{imgcodecs, imgproc};
 use std::path::Path;
 
@@ -172,7 +171,7 @@ pub fn draw_bboxes<P: AsRef<Path>>(
         bbox.rescale(heatmap_size, image_with_padding_size)?
             .draw_on_image(image)?;
     }
-    let params = VectorOfi32::new();
+    let params = Vector::<i32>::new();
     imgcodecs::imwrite(
         output_file.as_ref().as_os_str().to_str().unwrap(),
         image,

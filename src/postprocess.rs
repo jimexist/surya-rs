@@ -1,11 +1,10 @@
 use std::path::Path;
 
 use candle_core::Tensor;
-use opencv::core::{self, Mat};
+use opencv::core::{self, Mat, Vector};
 use opencv::imgcodecs;
 use opencv::imgproc;
 use opencv::prelude::*;
-use opencv::types::VectorOfMat;
 
 pub struct ImageChunks {
     pub resized_chunks: Vec<Mat>,
@@ -21,7 +20,7 @@ impl ImageChunks {
             .map(heatmap_tensor_to_mat)
             .collect::<crate::Result<Vec<_>>>()?;
         let mut image = Mat::default();
-        let image_chunks = VectorOfMat::from_iter(image_chunks);
+        let image_chunks = Vector::<Mat>::from_iter(image_chunks);
         core::vconcat(&image_chunks, &mut image)?;
         Ok(image)
     }
