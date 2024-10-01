@@ -10,7 +10,7 @@ default-run = "surya"
 
 [dependencies]
 anyhow = { version = "1.0.79", optional = true }
-candle-core = { version = "0.6.0" }
+candle-core = { version = "0.7.2" }
 candle-nn = { version = "0.6.0" }
 clap = { version = "4.5.11", features = ["derive"], optional = true }
 env_logger = { version = "0.11.0" }
