@@ -26,7 +26,7 @@ accelerate-src = { version = "0.3.2", optional = true }
 intel-mkl-src = { version = "0.8.1", features = [
   "mkl-static-lp64-iomp",
 ], optional = true }
-thiserror = { version = "1.0.56" }
+thiserror = { version = "2.0.3" }
 
 [features]
 default = ["cli"]
